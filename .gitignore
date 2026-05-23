@@ -1,8 +1,64 @@
+# === Python ===
 __pycache__/
 *.pyc
 *.pyo
-.zenith/
-.env
+*.pyd
+*.egg
 *.egg-info/
 dist/
 build/
+*.whl
+.eggs/
+
+# === Virtual environments ===
+.venv/
+venv/
+env/
+ENV/
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === Zenith runtime data ===
+.zenith/
+*.db
+*.db-journal
+*.jsonl
+staging_buffer.jsonl
+task_tree.json
+
+# === Environment / secrets ===
+.env
+.env.*
+*.key
+*.pem
+
+# === Testing / coverage ===
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# === Type checking ===
+.mypy_cache/
+.pytype/
+
+# === OS artifacts ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Logs ===
+*.log
+logs/
+
+# === Build artifacts ===
+*.o
+*.so
+*.dll
+*.dylib
