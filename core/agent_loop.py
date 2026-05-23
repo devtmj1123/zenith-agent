@@ -50,6 +50,15 @@ class AgentLoop:
 
         self._emit(EventType.THINKING, f"Processing: {goal[:100]}", state)
 
+        # Recall relevant memories before first LLM call
+        memories = await self.memory.recall_with_trace(goal, top_k=3)
+        if memories:
+            mem_context = "\n".join(f"- {m['content'][:200]}" for m in memories)
+            state.messages.insert(1, {
+                "role": "system",
+                "content": f"Relevant memories:\n{mem_context}"
+            })
+
         while state.iteration < state.max_iterations:
             state.iteration += 1
 
