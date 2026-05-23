@@ -24,9 +24,26 @@ log = logging.getLogger("zenith")
 
 # --- LLM Client ---
 
-async def llm_call(settings: Settings, messages: list, compressed_context: str = "") -> dict:
-    """Multi-provider LLM call (OpenAI-compatible API)."""
+async def llm_call(settings: Settings, messages: list, compressed_context: str = "",
+                   use_compressor: bool = False) -> dict:
+    """Multi-provider LLM call (OpenAI-compatible API).
+
+    Args:
+        use_compressor: If True, route to compressor model (fast local Ollama).
+                        If False, use main provider (Groq/NVIDIA/OpenAI).
+    """
     import httpx
+
+    if use_compressor:
+        base_url = settings.compressor_base_url
+        model = settings.compressor_model
+        api_key = settings.compressor_api_key
+        timeout = 15  # compressor should be fast (local)
+    else:
+        base_url = settings.llm_base_url
+        model = settings.llm_model
+        api_key = settings.llm_api_key
+        timeout = 60
 
     system_prompt = "You are Zenith, a proactive AI agent. Use tools to accomplish tasks. Be concise."
     if compressed_context:
@@ -36,18 +53,18 @@ async def llm_call(settings: Settings, messages: list, compressed_context: str =
     api_messages.extend(messages[-20:])
 
     headers = {
-        "Authorization": f"Bearer {settings.llm_api_key}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     payload = {
-        "model": settings.llm_model,
+        "model": model,
         "messages": api_messages,
         "max_tokens": 2000,
     }
 
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(
-            f"{settings.llm_base_url}/chat/completions",
+            f"{base_url}/chat/completions",
             headers=headers,
             json=payload,
         )
@@ -69,11 +86,20 @@ def build_agent(settings: Settings) -> AgentLoop:
     tools_manager = ToolsManager()
     tools_manager.auto_discover()
     soft_memory = SoftMemory()
-    memory_compressor = MemoryCompressor(soft_memory)
     codebook = CodebookCompiler()
 
+    # Main LLM (cloud: Groq/NVIDIA/OpenAI)
     async def _llm_call(messages, compressed_context=""):
         return await llm_call(settings, messages, compressed_context)
+
+    # Compressor LLM (fast local: Ollama llama3.2:3b)
+    async def _compress_llm(messages):
+        return await llm_call(settings, messages, "", use_compressor=True)
+
+    memory_compressor = MemoryCompressor(
+        soft_memory=soft_memory,
+        compress_llm_call=_compress_llm,
+    )
 
     return AgentLoop(
         llm_call=_llm_call,
@@ -162,9 +188,10 @@ def cmd_check(args, settings: Settings):
 
     print()
     print("  Zenith-OS Health Check")
-    print("  " + "-" * 40)
+    print("  " + "-" * 50)
 
-    # Provider info
+    # Main provider
+    print(f"  [Main LLM]")
     print(f"  Provider      : {settings.provider}")
     print(f"  Model         : {settings.llm_model}")
     print(f"  Base URL      : {settings.llm_base_url}")
@@ -172,6 +199,15 @@ def cmd_check(args, settings: Settings):
     key_status = "set" if settings.llm_api_key else "MISSING"
     env_key = PROVIDERS.get(settings.provider, {}).get("env_key", "ZENITH_API_KEY")
     print(f"  API Key       : {key_status} (set {env_key})")
+
+    # Compressor provider
+    print()
+    print(f"  [Compressor LLM]")
+    print(f"  Provider      : {settings.compressor_provider}")
+    print(f"  Model         : {settings.compressor_model}")
+    print(f"  Base URL      : {settings.compressor_base_url}")
+    c_key_status = "set" if settings.compressor_api_key else "not needed" if settings.compressor_provider == "ollama" else "MISSING"
+    print(f"  API Key       : {c_key_status}")
 
     # Module imports
     checks = [

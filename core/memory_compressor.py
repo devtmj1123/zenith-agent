@@ -1,29 +1,61 @@
 from __future__ import annotations
 import json
+import logging
 from typing import Dict, List, Optional
 
 from memory.hard_memory import PHYSICS_CONSTANTS
 from memory.soft_memory import SoftMemory
 
+log = logging.getLogger(__name__)
+
 
 class MemoryCompressor:
-    def __init__(self, soft_memory: Optional[SoftMemory] = None):
+    def __init__(self, soft_memory: Optional[SoftMemory] = None,
+                 compress_llm_call=None):
+        """
+        Args:
+            soft_memory: SoftMemory instance for persistence
+            compress_llm_call: async callable for LLM compression.
+                Injected from main.py — uses dedicated compressor model
+                (fast local model like Ollama llama3.2:3b)
+        """
         self.soft = soft_memory or SoftMemory()
         self._recall_trace: List[dict] = []
+        self._compress_llm = compress_llm_call
 
     async def compress_history(self, messages: List[dict],
                                 max_tokens: int = 2000) -> str:
-        """Compress message history into summary."""
+        """Compress message history into summary using fast local model."""
         if not messages:
             return ""
 
-        # Simple extractive compression: keep last N messages, summarize rest
+        # Short history: no compression needed
         if len(messages) <= 5:
             return self._messages_to_text(messages)
 
         old = messages[:-5]
         recent = messages[-5:]
 
+        # If we have a dedicated compressor LLM, use it for smart summarization
+        if self._compress_llm:
+            try:
+                old_text = self._messages_to_text(old)
+                prompt = [
+                    {"role": "system", "content": (
+                        "Compress this conversation history into a concise summary. "
+                        "Keep key facts, decisions, and context. Max 200 words."
+                    )},
+                    {"role": "user", "content": old_text},
+                ]
+                result = await self._compress_llm(prompt)
+                summary = result.get("content", "")
+                if summary:
+                    recent_text = self._messages_to_text(recent)
+                    return f"History (compressed): {summary}\n\nRecent:\n{recent_text}"
+            except Exception as e:
+                log.warning("Compression LLM failed, falling back to extractive: %s", e)
+
+        # Fallback: simple extractive compression
         summary_parts = []
         for msg in old:
             role = msg.get("role", "unknown")
@@ -40,7 +72,6 @@ class MemoryCompressor:
         """Recall from soft memory with associative reason tracing."""
         results = await self.soft.recall(query, top_k=top_k)
 
-        # Log recall trace for explainability
         for r in results:
             self._recall_trace.append({
                 "memory_id": r["id"],
