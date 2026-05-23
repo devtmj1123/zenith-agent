@@ -19,61 +19,67 @@ PROVIDERS = {
         "base_url": "https://api.openai.com/v1",
         "model": "gpt-4o-mini",
         "env_key": "OPENAI_API_KEY",
-        "model_env": "OPENAI_MODEL",
     },
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
         "model": "llama-3.3-70b-versatile",
         "env_key": "GROQ_API_KEY",
-        "model_env": "GROQ_MODEL",
     },
     "nvidia": {
         "base_url": "https://integrate.api.nvidia.com/v1",
         "model": "meta/llama-3.3-70b-instruct",
         "env_key": "NVIDIA_API_KEY",
-        "model_env": "NVIDIA_MODEL",
     },
     "ollama": {
         "base_url": "http://localhost:11434/v1",
         "model": "llama3.2:3b",
         "env_key": None,
-        "model_env": "OLLAMA_MODEL",
     },
 }
 
 
-def _resolve_model(provider_name: str) -> str:
-    """
-    Model resolution priority:
-    1. ZENITH_MODEL (global override)
-    2. PROVIDER_MODEL (e.g. GROQ_MODEL, NVIDIA_MODEL)
-    3. Provider default
-    """
-    global_override = os.getenv("ZENITH_MODEL", "").strip()
-    if global_override:
-        return global_override
+def _get_api_key(provider: str) -> str:
+    """Get API key for a provider. Checks provider-specific key first, then shared."""
+    preset = PROVIDERS.get(provider, {})
+    env_key = preset.get("env_key")
+    if env_key:
+        return os.getenv(env_key, "")
+    return ""  # ollama needs no key
 
-    preset = PROVIDERS.get(provider_name, {})
-    provider_override = os.getenv(preset.get("model_env", ""), "").strip()
-    if provider_override:
-        return provider_override
 
-    return preset.get("model", "")
+def _resolve_model(provider: str, role_env: str = "") -> str:
+    """
+    Model resolution:
+    1. Role-specific env (REASONING_MODEL, COMPRESSION_MODEL, FAST_PATH_MODEL)
+    2. Provider default
+    """
+    if role_env:
+        override = os.getenv(role_env, "").strip()
+        if override:
+            return override
+    return PROVIDERS.get(provider, {}).get("model", "")
+
+
+class ModelRole:
+    """One model role: provider + model + api_key + base_url."""
+    def __init__(self, provider: str, model: str, api_key: str, base_url: str):
+        self.provider = provider
+        self.model = model
+        self.api_key = api_key
+        self.base_url = base_url
+
+    def is_configured(self) -> bool:
+        if self.provider == "ollama":
+            return True
+        return bool(self.api_key)
 
 
 class Settings:
     def __init__(self):
-        # Main LLM
-        self.provider = "groq"
-        self.llm_model = ""
-        self.llm_api_key = ""
-        self.llm_base_url = ""
-
-        # Compressor LLM (fast local model)
-        self.compressor_provider = "ollama"
-        self.compressor_model = ""
-        self.compressor_api_key = ""
-        self.compressor_base_url = ""
+        # 3 model roles
+        self.reasoning: ModelRole = ModelRole("groq", "", "", "")
+        self.compression: ModelRole = ModelRole("ollama", "", "", "")
+        self.fast_path: ModelRole = ModelRole("ollama", "", "", "")
 
         # General
         self.token_budget = 50_000
@@ -81,47 +87,77 @@ class Settings:
         self.debug = False
         self.tts_enabled = False
         self.tts_engine = "edge"
-        self.ollama_url = "http://localhost:11434"
+
+        # Backward compat aliases (used by agent_loop, main.py old code)
+        self.provider = ""
+        self.llm_model = ""
+        self.llm_api_key = ""
+        self.llm_base_url = ""
+        self.compressor_provider = ""
+        self.compressor_model = ""
+        self.compressor_api_key = ""
+        self.compressor_base_url = ""
 
     def load_from_env(self):
-        # Main provider
-        self.provider = os.getenv("ZENITH_PROVIDER", self.provider).lower()
-        preset = PROVIDERS.get(self.provider, PROVIDERS["groq"])
-        self.llm_base_url = os.getenv("ZENITH_BASE_URL") or preset["base_url"]
-        self.llm_model = _resolve_model(self.provider)
-        if preset["env_key"]:
-            self.llm_api_key = os.getenv("ZENITH_API_KEY", os.getenv(preset["env_key"], ""))
-        else:
-            self.llm_api_key = os.getenv("ZENITH_API_KEY", "")
+        # --- REASONING ---
+        r_prov = os.getenv("REASONING_PROVIDER", "groq").lower()
+        r_preset = PROVIDERS.get(r_prov, PROVIDERS["groq"])
+        self.reasoning = ModelRole(
+            provider=r_prov,
+            model=_resolve_model(r_prov, "REASONING_MODEL"),
+            api_key=os.getenv("REASONING_API_KEY") or _get_api_key(r_prov),
+            base_url=r_preset["base_url"],
+        )
 
-        # Compressor provider (default: ollama for fast local compression)
-        self.compressor_provider = os.getenv("COMPRESS_PROVIDER", "ollama").lower()
-        compress_preset = PROVIDERS.get(self.compressor_provider, PROVIDERS["ollama"])
-        self.compressor_base_url = os.getenv("COMPRESS_BASE_URL") or compress_preset["base_url"]
-        self.compressor_model = os.getenv("COMPRESS_MODEL") or _resolve_model(self.compressor_provider)
-        if compress_preset["env_key"]:
-            self.compressor_api_key = os.getenv(
-                "COMPRESS_API_KEY",
-                os.getenv(compress_preset["env_key"], "")
-            )
-        else:
-            self.compressor_api_key = ""
+        # --- COMPRESSION ---
+        c_prov = os.getenv("COMPRESSION_PROVIDER", "ollama").lower()
+        c_preset = PROVIDERS.get(c_prov, PROVIDERS["ollama"])
+        self.compression = ModelRole(
+            provider=c_prov,
+            model=_resolve_model(c_prov, "COMPRESSION_MODEL"),
+            api_key=os.getenv("COMPRESSION_API_KEY") or _get_api_key(c_prov),
+            base_url=c_preset["base_url"],
+        )
+
+        # --- FAST PATH ---
+        f_prov = os.getenv("FAST_PATH_PROVIDER", "ollama").lower()
+        f_preset = PROVIDERS.get(f_prov, PROVIDERS["ollama"])
+        self.fast_path = ModelRole(
+            provider=f_prov,
+            model=_resolve_model(f_prov, "FAST_PATH_MODEL"),
+            api_key=os.getenv("FAST_PATH_API_KEY") or _get_api_key(f_prov),
+            base_url=f_preset["base_url"],
+        )
 
         self.debug = os.getenv("ZENITH_DEBUG", "").lower() in ("1", "true", "yes")
 
+        # Backward compat aliases
+        self._sync_aliases()
+
+    def _sync_aliases(self):
+        """Keep old attribute names working for existing code."""
+        self.provider = self.reasoning.provider
+        self.llm_model = self.reasoning.model
+        self.llm_api_key = self.reasoning.api_key
+        self.llm_base_url = self.reasoning.base_url
+        self.compressor_provider = self.compression.provider
+        self.compressor_model = self.compression.model
+        self.compressor_api_key = self.compression.api_key
+        self.compressor_base_url = self.compression.base_url
+
     def resolve_provider(self, name: str):
-        """Switch main provider by name."""
+        """Switch reasoning provider by name."""
         name = name.lower()
         if name not in PROVIDERS:
             raise ValueError(f"Unknown provider: {name}. Available: {list(PROVIDERS.keys())}")
-        self.provider = name
         preset = PROVIDERS[name]
-        self.llm_base_url = preset["base_url"]
-        self.llm_model = _resolve_model(name)
-        if preset["env_key"]:
-            self.llm_api_key = os.getenv(preset["env_key"], os.getenv("ZENITH_API_KEY", ""))
+        self.reasoning = ModelRole(
+            provider=name,
+            model=preset["model"],
+            api_key=_get_api_key(name),
+            base_url=preset["base_url"],
+        )
+        self._sync_aliases()
 
     def is_configured(self) -> bool:
-        if self.provider == "ollama":
-            return True
-        return bool(self.llm_api_key)
+        return self.reasoning.is_configured()

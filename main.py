@@ -24,47 +24,32 @@ log = logging.getLogger("zenith")
 
 # --- LLM Client ---
 
-async def llm_call(settings: Settings, messages: list, compressed_context: str = "",
-                   use_compressor: bool = False) -> dict:
-    """Multi-provider LLM call (OpenAI-compatible API).
-
-    Args:
-        use_compressor: If True, route to compressor model (fast local Ollama).
-                        If False, use main provider (Groq/NVIDIA/OpenAI).
-    """
+async def llm_call_for_role(role: "ModelRole", messages: list,
+                            system_prompt: str = "", max_tokens: int = 2000) -> dict:
+    """Generic LLM call for any model role."""
     import httpx
 
-    if use_compressor:
-        base_url = settings.compressor_base_url
-        model = settings.compressor_model
-        api_key = settings.compressor_api_key
-        timeout = 15  # compressor should be fast (local)
-    else:
-        base_url = settings.llm_base_url
-        model = settings.llm_model
-        api_key = settings.llm_api_key
-        timeout = 60
-
-    system_prompt = "You are Zenith, a proactive AI agent. Use tools to accomplish tasks. Be concise."
-    if compressed_context:
-        system_prompt += f"\n\nCompressed context: {compressed_context}"
+    if not system_prompt:
+        system_prompt = "You are Zenith, a proactive AI agent. Be concise."
 
     api_messages = [{"role": "system", "content": system_prompt}]
     api_messages.extend(messages[-20:])
 
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        "Authorization": f"Bearer {role.api_key}",
         "Content-Type": "application/json",
     }
     payload = {
-        "model": model,
+        "model": role.model,
         "messages": api_messages,
-        "max_tokens": 2000,
+        "max_tokens": max_tokens,
     }
+
+    timeout = 15 if role.provider == "ollama" else 60
 
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(
-            f"{base_url}/chat/completions",
+            f"{role.base_url}/chat/completions",
             headers=headers,
             json=payload,
         )
@@ -88,17 +73,26 @@ def build_agent(settings: Settings) -> AgentLoop:
     soft_memory = SoftMemory()
     codebook = CodebookCompiler()
 
-    # Main LLM (cloud: Groq/NVIDIA/OpenAI)
-    async def _llm_call(messages, compressed_context=""):
-        return await llm_call(settings, messages, compressed_context)
+    # REASONING model — main thinking + tool calls
+    async def _reasoning_call(messages, compressed_context=""):
+        sys = "You are Zenith, a proactive AI agent. Use tools to accomplish tasks. Be concise."
+        if compressed_context:
+            sys += f"\n\nCompressed context: {compressed_context}"
+        return await llm_call_for_role(settings.reasoning, messages, sys)
 
-    # Compressor LLM (fast local: Ollama llama3.2:3b)
-    async def _compress_llm(messages):
-        return await llm_call(settings, messages, "", use_compressor=True)
+    # COMPRESSION model — summarize history
+    async def _compression_call(messages):
+        sys = "Compress this conversation history into a concise summary. Keep key facts, decisions, and context. Max 200 words."
+        return await llm_call_for_role(settings.compression, messages, sys)
+
+    # FAST PATH model — quick approximate answers
+    async def _fast_path_call(messages):
+        sys = "Answer briefly in 1-2 sentences. Be fast and approximate."
+        return await llm_call_for_role(settings.fast_path, messages, sys, max_tokens=200)
 
     memory_compressor = MemoryCompressor(
         soft_memory=soft_memory,
-        compress_llm_call=_compress_llm,
+        compress_llm_call=_compression_call,
     )
 
     return AgentLoop(
@@ -117,8 +111,8 @@ def cmd_chat(args, settings: Settings):
         settings.resolve_provider(args.provider)
 
     if not settings.is_configured():
-        print(f"\n  Error: No API key for '{settings.provider}'.")
-        env_key = PROVIDERS[settings.provider].get("env_key", "ZENITH_API_KEY")
+        print(f"\n  Error: No API key for '{settings.reasoning.provider}'.")
+        env_key = PROVIDERS.get(settings.reasoning.provider, {}).get("env_key", "REASONING_API_KEY")
         print(f"  Set {env_key} or use --provider ollama\n")
         sys.exit(1)
 
@@ -128,10 +122,9 @@ def cmd_chat(args, settings: Settings):
     print("  +================================================+")
     print("  |  Zenith-OS v1.0 -- Super Agent Operating Sys   |")
     print("  +================================================+")
-    print(f"  |  Provider : {settings.provider:<35}|")
-    print(f"  |  Model    : {settings.llm_model:<35}|")
-    api_status = "set" if settings.llm_api_key else "MISSING"
-    print(f"  |  API Key  : {api_status:<35}|")
+    print(f"  |  Reasoning   : {settings.reasoning.provider}/{settings.reasoning.model[:20]:<20}|")
+    print(f"  |  Compression : {settings.compression.provider}/{settings.compression.model[:20]:<20}|")
+    print(f"  |  Fast Path   : {settings.fast_path.provider}/{settings.fast_path.model[:20]:<20}|")
     print("  +================================================+")
     print("  |  Commands: /quit /clear /provider <name>       |")
     print("  +================================================+")
@@ -160,11 +153,11 @@ def cmd_chat(args, settings: Settings):
                     try:
                         settings.resolve_provider(cmd[1])
                         agent = build_agent(settings)
-                        print(f"  Switched to {settings.provider} ({settings.llm_model})")
+                        print(f"  Switched reasoning to {settings.reasoning.provider}/{settings.reasoning.model}")
                     except ValueError as e:
                         print(f"  {e}")
                 else:
-                    print(f"  Current: {settings.provider} | Available: {', '.join(PROVIDERS.keys())}")
+                    print(f"  Reasoning: {settings.reasoning.provider} | Available: {', '.join(PROVIDERS.keys())}")
                 continue
             if cmd[0] == "/help":
                 print("  /quit          -- Exit")
@@ -188,26 +181,20 @@ def cmd_check(args, settings: Settings):
 
     print()
     print("  Zenith-OS Health Check")
-    print("  " + "-" * 50)
+    print("  " + "-" * 55)
 
-    # Main provider
-    print(f"  [Main LLM]")
-    print(f"  Provider      : {settings.provider}")
-    print(f"  Model         : {settings.llm_model}")
-    print(f"  Base URL      : {settings.llm_base_url}")
-
-    key_status = "set" if settings.llm_api_key else "MISSING"
-    env_key = PROVIDERS.get(settings.provider, {}).get("env_key", "ZENITH_API_KEY")
-    print(f"  API Key       : {key_status} (set {env_key})")
-
-    # Compressor provider
-    print()
-    print(f"  [Compressor LLM]")
-    print(f"  Provider      : {settings.compressor_provider}")
-    print(f"  Model         : {settings.compressor_model}")
-    print(f"  Base URL      : {settings.compressor_base_url}")
-    c_key_status = "set" if settings.compressor_api_key else "not needed" if settings.compressor_provider == "ollama" else "MISSING"
-    print(f"  API Key       : {c_key_status}")
+    # All 3 model roles
+    for label, role in [
+        ("REASONING", settings.reasoning),
+        ("COMPRESSION", settings.compression),
+        ("FAST PATH", settings.fast_path),
+    ]:
+        key_status = "set" if role.api_key else ("no key needed" if role.provider == "ollama" else "MISSING")
+        print(f"  [{label}]")
+        print(f"    Provider : {role.provider}")
+        print(f"    Model    : {role.model}")
+        print(f"    API Key  : {key_status}")
+        print()
 
     # Module imports
     checks = [
@@ -232,15 +219,15 @@ def cmd_check(args, settings: Settings):
         except Exception as e:
             print(f"  {label:<20}: FAIL - {e}")
 
-    # API connectivity test
+    # API connectivity test (reasoning provider only)
     print()
-    if settings.is_configured():
-        print(f"  Testing {settings.provider} connection...", end=" ")
+    if settings.reasoning.is_configured():
+        print(f"  Testing {settings.reasoning.provider} connection...", end=" ")
         try:
             import httpx
             resp = httpx.get(
-                f"{settings.llm_base_url}/models",
-                headers={"Authorization": f"Bearer {settings.llm_api_key}"},
+                f"{settings.reasoning.base_url}/models",
+                headers={"Authorization": f"Bearer {settings.reasoning.api_key}"},
                 timeout=10,
             )
             if resp.status_code == 200:
@@ -250,7 +237,7 @@ def cmd_check(args, settings: Settings):
         except Exception as e:
             print(f"FAIL - {e}")
     else:
-        print(f"  Skipping API test (no key)")
+        print(f"  Skipping API test (no reasoning key)")
 
     print()
 
@@ -261,30 +248,40 @@ def cmd_server(args, settings: Settings):
         settings.resolve_provider(args.provider)
 
     if not settings.is_configured():
-        print(f"Error: No API key for '{settings.provider}'")
+        print(f"Error: No API key for '{settings.reasoning.provider}'")
         sys.exit(1)
 
     from api.server import ZenithServer
     agent = build_agent(settings)
     server = ZenithServer(agent, host=args.host, port=args.port)
     print(f"\n  Starting Zenith server on {args.host}:{args.port}")
-    print(f"  Provider: {settings.provider} ({settings.llm_model})\n")
+    print(f"  Reasoning: {settings.reasoning.provider}/{settings.reasoning.model}")
+    print(f"  Compression: {settings.compression.provider}/{settings.compression.model}\n")
     asyncio.run(server.start())
 
 
 def cmd_providers(args, settings: Settings):
-    """List available providers."""
+    """List available providers and current model roles."""
+    import os
     print()
     print("  Available LLM Providers")
-    print("  " + "-" * 50)
+    print("  " + "-" * 55)
     for name, preset in PROVIDERS.items():
         env_key = preset.get("env_key") or "none"
-        has_key = "OK" if (preset["env_key"] and __import__("os").getenv(preset["env_key"])) else "--"
-        marker = " <" if name == settings.provider else ""
-        print(f"  {name:<10} {preset['model']:<30} {env_key:<20} [{has_key}]{marker}")
+        has_key = "OK" if (preset["env_key"] and os.getenv(preset["env_key"])) else "--"
+        print(f"  {name:<10} {preset['model']:<30} {env_key:<20} [{has_key}]")
+    print()
+    print("  Current Model Roles (.env)")
+    print("  " + "-" * 55)
+    for label, role in [
+        ("REASONING", settings.reasoning),
+        ("COMPRESSION", settings.compression),
+        ("FAST PATH", settings.fast_path),
+    ]:
+        print(f"  {label:<12} {role.provider}/{role.model}")
     print()
     print("  Usage: zenith chat --provider groq")
-    print("         export GROQ_API_KEY=gsk_...")
+    print("         Set REASONING_PROVIDER, COMPRESSION_PROVIDER, FAST_PATH_PROVIDER in .env")
     print()
 
 
