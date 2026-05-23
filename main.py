@@ -62,6 +62,9 @@ async def llm_call_for_role(role: "ModelRole", messages: list,
     return {
         "content": choice["message"]["content"],
         "tokens_used": usage.get("total_tokens", 0),
+        "prompt_tokens": usage.get("prompt_tokens", 0),
+        "completion_tokens": usage.get("completion_tokens", 0),
+        "model": data.get("model", role.model),
     }
 
 
@@ -78,12 +81,20 @@ def build_agent(settings: Settings) -> AgentLoop:
     soft_memory = SoftMemory()
     codebook = CodebookCompiler()
 
+    # Token tracking (mutable container shared across calls)
+    token_stats = {"prompt": 0, "completion": 0, "total": 0, "model": ""}
+
     # REASONING model — main thinking + tool calls
     async def _reasoning_call(messages, compressed_context=""):
         sys = "You are Zenith, a proactive AI agent. Use tools to accomplish tasks. Be concise."
         if compressed_context:
             sys += f"\n\nCompressed context: {compressed_context}"
-        return await llm_call_for_role(settings.reasoning, messages, sys)
+        result = await llm_call_for_role(settings.reasoning, messages, sys)
+        token_stats["prompt"] += result.get("prompt_tokens", 0)
+        token_stats["completion"] += result.get("completion_tokens", 0)
+        token_stats["total"] += result.get("tokens_used", 0)
+        token_stats["model"] = result.get("model", settings.reasoning.model)
+        return result
 
     # COMPRESSION model — summarize history
     async def _compression_call(messages):
@@ -100,12 +111,14 @@ def build_agent(settings: Settings) -> AgentLoop:
         compress_llm_call=_compression_call,
     )
 
-    return AgentLoop(
+    agent = AgentLoop(
         llm_call=_reasoning_call,
         tools_manager=tools_manager,
         memory_compressor=memory_compressor,
         codebook=codebook,
     )
+    agent._token_stats = token_stats  # Attach for CLI display
+    return agent
 
 
 # --- CLI Commands ---
@@ -123,16 +136,20 @@ def cmd_chat(args, settings: Settings):
 
     agent = build_agent(settings)
 
+    def _short_model(name: str) -> str:
+        """Shorten model name for display."""
+        return name.split("/")[-1] if "/" in name else name
+
     print()
-    print("  +================================================+")
-    print("  |  Zenith-OS v1.0 -- Super Agent Operating Sys   |")
-    print("  +================================================+")
-    print(f"  |  Reasoning   : {settings.reasoning.provider}/{settings.reasoning.model[:20]:<20}|")
-    print(f"  |  Compression : {settings.compression.provider}/{settings.compression.model[:20]:<20}|")
-    print(f"  |  Fast Path   : {settings.fast_path.provider}/{settings.fast_path.model[:20]:<20}|")
-    print("  +================================================+")
-    print("  |  Commands: /quit /clear /provider <name>       |")
-    print("  +================================================+")
+    print("  +====================================================+")
+    print("  |  Zenith-OS v1.0 -- Super Agent Operating System    |")
+    print("  +====================================================+")
+    print(f"  |  Reasoning   : {settings.reasoning.provider}/{_short_model(settings.reasoning.model):<28}|")
+    print(f"  |  Compression : {settings.compression.provider}/{_short_model(settings.compression.model):<28}|")
+    print(f"  |  Fast Path   : {settings.fast_path.provider}/{_short_model(settings.fast_path.model):<28}|")
+    print("  +====================================================+")
+    print("  |  Commands: /quit /clear /provider <name> /history  |")
+    print("  +====================================================+")
     print()
 
     while True:
@@ -167,16 +184,51 @@ def cmd_chat(args, settings: Settings):
             if cmd[0] == "/help":
                 print("  /quit          -- Exit")
                 print("  /clear         -- Clear screen")
-                print("  /provider <n>  -- Switch LLM provider")
+                print("  /provider <n>  -- Switch reasoning provider")
                 print("  /provider      -- Show current provider")
+                print("  /models        -- Show all 3 model roles")
+                print("  /memory        -- Show memory stats")
                 print("  /help          -- This help")
+                continue
+            if cmd[0] == "/models":
+                print(f"  Reasoning   : {settings.reasoning.provider}/{settings.reasoning.model}")
+                print(f"  Compression : {settings.compression.provider}/{settings.compression.model}")
+                print(f"  Fast Path   : {settings.fast_path.provider}/{settings.fast_path.model}")
+                continue
+            if cmd[0] == "/memory":
+                db_path = agent.memory.soft.DB_PATH
+                if db_path.exists():
+                    import sqlite3
+                    with sqlite3.connect(str(db_path)) as conn:
+                        count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+                    print(f"  Soft memory: {count} memories stored ({db_path})")
+                else:
+                    print(f"  Soft memory: empty (no memories yet)")
                 continue
             print(f"  Unknown command: {cmd[0]}. Type /help")
             continue
 
         # Run agent
         result = asyncio.run(agent.run(user_input))
-        print(f"\n  Zenith: {result.final_response}\n")
+
+        # Response
+        print(f"\n  Zenith: {result.final_response}")
+
+        # Stats line: tokens in/out, model, tools
+        ts = agent._token_stats
+        model_display = _short_model(ts.get("model", settings.reasoning.model))
+        stats_parts = [f"model={settings.reasoning.provider}/{model_display}"]
+        if ts["prompt"] > 0:
+            stats_parts.append(f"in={ts['prompt']}")
+            stats_parts.append(f"out={ts['completion']}")
+        if result.tool_calls_made > 0:
+            stats_parts.append(f"tools={result.tool_calls_made}")
+        if result.iteration > 1:
+            stats_parts.append(f"iter={result.iteration}")
+        print(f"  [{', '.join(stats_parts)}]")
+        # Reset for next turn
+        ts["prompt"] = ts["completion"] = ts["total"] = 0
+        print()
 
 
 def cmd_check(args, settings: Settings):

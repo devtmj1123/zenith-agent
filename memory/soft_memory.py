@@ -121,12 +121,15 @@ class SoftMemory:
                          (new_id, old_id))
         return new_id
 
+    _embedding_model = None  # Class-level cache — load once
+
     async def _encode(self, text: str):
         try:
-            from sentence_transformers import SentenceTransformer
             import numpy as np
-            model = SentenceTransformer("all-MiniLM-L6-v2")
-            vec = model.encode(text, normalize_embeddings=True)
+            if SoftMemory._embedding_model is None:
+                from sentence_transformers import SentenceTransformer
+                SoftMemory._embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+            vec = SoftMemory._embedding_model.encode(text, normalize_embeddings=True)
             return vec.astype(np.float32).tobytes()
         except Exception:
             return None
