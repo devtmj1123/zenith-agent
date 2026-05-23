@@ -69,7 +69,12 @@ async def llm_call_for_role(role: "ModelRole", messages: list,
 
 def build_agent(settings: Settings) -> AgentLoop:
     tools_manager = ToolsManager()
-    tools_manager.auto_discover()
+
+    # Register builtin tools
+    from tools.builtin import BUILTIN_TOOLS
+    for name, fn in BUILTIN_TOOLS.items():
+        tools_manager.register(name, fn)
+
     soft_memory = SoftMemory()
     codebook = CodebookCompiler()
 
@@ -96,7 +101,7 @@ def build_agent(settings: Settings) -> AgentLoop:
     )
 
     return AgentLoop(
-        llm_call=_llm_call,
+        llm_call=_reasoning_call,
         tools_manager=tools_manager,
         memory_compressor=memory_compressor,
         codebook=codebook,

@@ -1,0 +1,270 @@
+# Zenith Codebook — action definitions for intent compilation
+# Keep it minimal. ~50 actions. Karpathy says start small.
+
+# ── Browser ──────────────────────────────────────────────
+- token: "ACT:CLICK"
+  patterns: ["\\bclick\\b", "\\bpress\\b", "\\btap\\b", "\\bpush\\b"]
+  target: webmcp
+  description: "Click an element on the page"
+  params_schema:
+    element: "string — CSS selector or description"
+  risk_level: low
+
+- token: "ACT:TYPE"
+  patterns: ["\\btype\\b", "\\binput\\b", "\\benter text\\b", "\\bfill\\b", "\\bwrite into\\b"]
+  target: webmcp
+  description: "Type text into an input field"
+  params_schema:
+    text: "string — text to type"
+    target: "string — selector or field name"
+  risk_level: low
+
+- token: "ACT:SCROLL"
+  patterns: ["\\bscroll\\b", "\\bswipe\\b", "\\bscroll down\\b", "\\bscroll up\\b"]
+  target: webmcp
+  description: "Scroll the page"
+  params_schema:
+    direction: "string — up/down/left/right"
+  risk_level: low
+
+- token: "ACT:NAVIGATE"
+  patterns: ["\\bnavigate\\b", "\\bgo to\\b", "\\bopen url\\b", "\\bvisit\\b", "\\bbrowse to\\b"]
+  target: webmcp
+  description: "Navigate to a URL"
+  params_schema:
+    url: "string — target URL"
+  risk_level: low
+
+- token: "ACT:NEW_TAB"
+  patterns: ["\\bnew tab\\b", "\\bopen tab\\b", "\\bopen a tab\\b"]
+  target: webmcp
+  description: "Open a new browser tab"
+  params_schema:
+    url: "string — optional URL to open"
+  risk_level: low
+
+- token: "ACT:CLOSE_TAB"
+  patterns: ["\\bclose tab\\b", "\\bclose the tab\\b", "\\bclose browser\\b"]
+  target: webmcp
+  description: "Close the current tab"
+  params_schema: {}
+  risk_level: medium
+
+- token: "ACT:GET_ELEMENTS"
+  patterns: ["\\bget elements\\b", "\\bfind elements\\b", "\\blist elements\\b", "\\bget buttons\\b", "\\bget links\\b"]
+  target: webmcp
+  description: "Get interactive elements on the page"
+  params_schema:
+    selector: "string — CSS selector filter"
+  risk_level: low
+
+- token: "ACT:SCREENSHOT"
+  patterns: ["\\bscreenshot\\b", "\\btake screenshot\\b", "\\bcapture screen\\b", "\\bprint screen\\b"]
+  target: webmcp
+  description: "Take a screenshot of the current page"
+  params_schema: {}
+  risk_level: low
+
+# ── File ─────────────────────────────────────────────────
+- token: "ACT:READ_FILE"
+  patterns: ["\\bread file\\b", "\\bread the file\\b", "\\bread\\b", "\\bopen file\\b", "\\bshow file\\b", "\\bcat\\b", "\\bview file\\b"]
+  target: file
+  description: "Read a file from disk"
+  params_schema:
+    path: "string — file path"
+  risk_level: low
+
+- token: "ACT:WRITE_FILE"
+  patterns: ["\\bwrite file\\b", "\\bcreate file\\b", "\\bsave file\\b", "\\bsave to\\b", "\\bwrite to\\b"]
+  target: file
+  description: "Write content to a file"
+  params_schema:
+    path: "string — file path"
+    content: "string — file content"
+  risk_level: medium
+
+- token: "ACT:EDIT_FILE"
+  patterns: ["\\bedit file\\b", "\\bmodify file\\b", "\\bupdate file\\b", "\\breplace in\\b", "\\bfind and replace\\b"]
+  target: file
+  description: "Edit an existing file"
+  params_schema:
+    path: "string — file path"
+    old_text: "string — text to find"
+    new_text: "string — replacement text"
+  risk_level: medium
+
+- token: "ACT:DELETE_FILE"
+  patterns: ["\\bdelete file\\b", "\\bremove file\\b", "\\bunlink\\b"]
+  target: file
+  description: "Delete a file"
+  params_schema:
+    path: "string — file path"
+  risk_level: high
+
+- token: "ACT:LIST_DIR"
+  patterns: ["\\blist dir\\b", "\\blist files\\b", "\\bshow files\\b", "\\bdir\\b", "\\bls\\b", "\\bwhat files\\b"]
+  target: file
+  description: "List files in a directory"
+  params_schema:
+    path: "string — directory path"
+  risk_level: low
+
+- token: "ACT:MKDIR"
+  patterns: ["\\bmake dir\\b", "\\bmkdir\\b", "\\bcreate folder\\b", "\\bcreate directory\\b"]
+  target: file
+  description: "Create a directory"
+  params_schema:
+    path: "string — directory path"
+  risk_level: low
+
+# ── Shell ────────────────────────────────────────────────
+- token: "ACT:RUN_COMMAND"
+  patterns: ["\\brun command\\b", "\\bexecute\\b", "\\brun\\b", "\\bshell\\b", "\\bterminal\\b", "\\bbash\\b"]
+  target: shell
+  description: "Run a shell command"
+  params_schema:
+    command: "string — command to execute"
+  risk_level: high
+
+- token: "ACT:PYTHON_EXEC"
+  patterns: ["\\bpython\\b", "\\brun python\\b", "\\bexecute python\\b", "\\beval\\b"]
+  target: shell
+  description: "Execute Python code"
+  params_schema:
+    code: "string — Python code to run"
+  risk_level: high
+
+- token: "ACT:GIT"
+  patterns: ["\\bgit\\b", "\\bgit commit\\b", "\\bgit push\\b", "\\bgit pull\\b", "\\bgit status\\b"]
+  target: shell
+  description: "Run a git command"
+  params_schema:
+    subcommand: "string — git subcommand and args"
+  risk_level: medium
+
+# ── Web ──────────────────────────────────────────────────
+- token: "ACT:WEB_SEARCH"
+  patterns: ["\\bsearch\\b", "\\bfind\\b", "\\blook up\\b", "\\bgoogle\\b", "\\bsearch for\\b"]
+  target: webmcp
+  description: "Search the web"
+  params_schema:
+    query: "string — search query"
+  risk_level: low
+
+- token: "ACT:SCRAPE"
+  patterns: ["\\bscrape\\b", "\\bextract from\\b", "\\bget data from\\b", "\\bparse page\\b"]
+  target: webmcp
+  description: "Scrape content from a webpage"
+  params_schema:
+    url: "string — target URL"
+    selector: "string — CSS selector for content"
+  risk_level: low
+
+- token: "ACT:FETCH"
+  patterns: ["\\bfetch\\b", "\\bhttp get\\b", "\\brequest\\b", "\\bapi call\\b", "\\bget url\\b"]
+  target: webmcp
+  description: "Fetch content from a URL"
+  params_schema:
+    url: "string — URL to fetch"
+    method: "string — HTTP method (default GET)"
+  risk_level: low
+
+# ── Desktop ──────────────────────────────────────────────
+- token: "ACT:GET_UI_TREE"
+  patterns: ["\\bui tree\\b", "\\bget ui\\b", "\\baccessibility tree\\b", "\\bui elements\\b", "\\bget windows\\b"]
+  target: uia
+  description: "Get the desktop UI accessibility tree"
+  params_schema:
+    window: "string — optional window title filter"
+  risk_level: low
+
+- token: "ACT:CLICK_ELEMENT"
+  patterns: ["\\bclick element\\b", "\\bclick on\\b", "\\bclick button\\b", "\\bpress button\\b"]
+  target: uia
+  description: "Click a desktop UI element"
+  params_schema:
+    element: "string — element name or automation ID"
+  risk_level: low
+
+- token: "ACT:TYPE_TEXT"
+  patterns: ["\\btype text\\b", "\\btype into\\b", "\\benter text in\\b", "\\bfill field\\b"]
+  target: uia
+  description: "Type text into a desktop field"
+  params_schema:
+    text: "string — text to type"
+    target: "string — field name or automation ID"
+  risk_level: low
+
+- token: "ACT:FOCUS_WINDOW"
+  patterns: ["\\bfocus window\\b", "\\bbring to front\\b", "\\bactivate window\\b", "\\bswitch to\\b"]
+  target: uia
+  description: "Focus a desktop window"
+  params_schema:
+    window: "string — window title"
+  risk_level: low
+
+# ── System ───────────────────────────────────────────────
+- token: "ACT:GET_TIME"
+  patterns: ["\\bwhat time\\b", "\\bcurrent time\\b", "\\bget time\\b", "\\bdate\\b", "\\btoday\\b"]
+  target: system
+  description: "Get the current date and time"
+  params_schema: {}
+  risk_level: low
+
+- token: "ACT:GET_ENV"
+  patterns: ["\\benv var\\b", "\\benvironment variable\\b", "\\bget env\\b", "\\bprintenv\\b"]
+  target: system
+  description: "Get an environment variable"
+  params_schema:
+    name: "string — variable name"
+  risk_level: low
+
+- token: "ACT:CLIPBOARD"
+  patterns: ["\\bclipboard\\b", "\\bcopy to clipboard\\b", "\\bpaste\\b", "\\bget clipboard\\b"]
+  target: system
+  description: "Access the system clipboard"
+  params_schema:
+    action: "string — get/set"
+    content: "string — content to set (if action=set)"
+  risk_level: low
+
+# ── Memory ───────────────────────────────────────────────
+- token: "ACT:RECALL"
+  patterns: ["\\brecall\\b", "\\bremember\\b", "\\bwhat did i\\b", "\\bmemory\\b", "\\bwhat was\\b"]
+  target: system
+  description: "Recall information from memory"
+  params_schema:
+    query: "string — what to recall"
+  risk_level: low
+
+- token: "ACT:STORE_MEMORY"
+  patterns: ["\\bremember that\\b", "\\bstore\\b", "\\bsave to memory\\b", "\\bnote that\\b", "\\bkeep in mind\\b"]
+  target: system
+  description: "Store information in memory"
+  params_schema:
+    content: "string — what to remember"
+  risk_level: low
+
+- token: "ACT:COMPRESS_MEMORY"
+  patterns: ["\\bcompress memory\\b", "\\bsummarize context\\b", "\\bcompress context\\b"]
+  target: system
+  description: "Compress memory/context to save tokens"
+  params_schema: {}
+  risk_level: low
+
+# ── Application ──────────────────────────────────────────
+- token: "ACT:OPEN_APP"
+  patterns: ["\\bopen\\b", "\\blaunch\\b", "\\bstart\\b", "\\brun app\\b", "\\bopen app\\b"]
+  target: shell
+  description: "Launch an application"
+  params_schema:
+    app: "string — application name"
+  risk_level: low
+
+- token: "ACT:CLOSE_APP"
+  patterns: ["\\bclose app\\b", "\\bkill\\b", "\\bquit\\b", "\\bstop app\\b", "\\bexit app\\b"]
+  target: shell
+  description: "Close an application"
+  params_schema:
+    app: "string — application name"
+  risk_level: medium
