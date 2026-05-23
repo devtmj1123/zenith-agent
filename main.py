@@ -136,6 +136,16 @@ def cmd_chat(args, settings: Settings):
 
     agent = build_agent(settings)
 
+    # Preload embedding model so first message isn't slow
+    import warnings
+    warnings.filterwarnings("ignore", message=".*HF Hub.*")
+    from memory.soft_memory import SoftMemory
+    if SoftMemory._embedding_model is None:
+        print("  Loading embedding model...", end=" ", flush=True)
+        from sentence_transformers import SentenceTransformer
+        SoftMemory._embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+        print("done")
+
     def _short_model(name: str) -> str:
         """Shorten model name for display."""
         return name.split("/")[-1] if "/" in name else name
