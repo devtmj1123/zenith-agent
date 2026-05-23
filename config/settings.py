@@ -55,10 +55,10 @@ class Settings:
         # Provider selection
         self.provider = os.getenv("ZENITH_PROVIDER", self.provider).lower()
 
-        # Apply provider defaults
+        # Apply provider defaults (use provider model if ZENITH_MODEL is empty/unset)
         preset = PROVIDERS.get(self.provider, PROVIDERS["groq"])
-        self.llm_base_url = os.getenv("ZENITH_BASE_URL", preset["base_url"])
-        self.llm_model = os.getenv("ZENITH_MODEL", preset["model"])
+        self.llm_base_url = os.getenv("ZENITH_BASE_URL") or preset["base_url"]
+        self.llm_model = os.getenv("ZENITH_MODEL") or preset["model"]
 
         # API key: explicit env var > provider-specific env var
         if preset["env_key"]:
