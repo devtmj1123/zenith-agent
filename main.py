@@ -83,12 +83,23 @@ def build_agent(settings: Settings) -> AgentLoop:
 
     # Token tracking (mutable container shared across calls)
     token_stats = {"prompt": 0, "completion": 0, "total": 0, "model": ""}
+    tool_list = tools_manager.list_tools()
 
     # REASONING model — main thinking + tool calls
     async def _reasoning_call(messages, compressed_context=""):
-        sys = "You are Zenith, a proactive AI agent. Use tools to accomplish tasks. Be concise."
+        sys = (
+            "You are Zenith, a proactive AI agent. Be concise and direct.\n\n"
+            "You have these tools — use them by outputting ACT:TOOL_NAME:\n"
+        )
+        for t in tool_list:
+            sys += f"  - ACT:{t.upper()}\n"
+        sys += (
+            "\nTo use a tool, output exactly: ACT:TOOL_NAME\n"
+            "Example: ACT:RUN_COMMAND or ACT:READ_FILE\n"
+            "If you need no tools, just answer directly.\n"
+        )
         if compressed_context:
-            sys += f"\n\nCompressed context: {compressed_context}"
+            sys += f"\nCompressed context: {compressed_context}"
         result = await llm_call_for_role(settings.reasoning, messages, sys)
         token_stats["prompt"] += result.get("prompt_tokens", 0)
         token_stats["completion"] += result.get("completion_tokens", 0)
@@ -147,24 +158,42 @@ def cmd_chat(args, settings: Settings):
         print("done")
 
     def _short_model(name: str) -> str:
-        """Shorten model name for display."""
         return name.split("/")[-1] if "/" in name else name
 
+    # --- Header ---
     print()
-    print("  +====================================================+")
-    print("  |  Zenith-OS v1.0 -- Super Agent Operating System    |")
-    print("  +====================================================+")
-    print(f"  |  Reasoning   : {settings.reasoning.provider}/{_short_model(settings.reasoning.model):<28}|")
-    print(f"  |  Compression : {settings.compression.provider}/{_short_model(settings.compression.model):<28}|")
-    print(f"  |  Fast Path   : {settings.fast_path.provider}/{_short_model(settings.fast_path.model):<28}|")
-    print("  +====================================================+")
-    print("  |  Commands: /quit /clear /provider <name> /history  |")
-    print("  +====================================================+")
+    print("  \033[1;36mZenith-OS\033[0m v1.0  --  Super Agent Operating System")
+    print("  " + "\033[90m" + "-" * 52 + "\033[0m")
+    print(f"  \033[1mReasoning\033[0m    {settings.reasoning.provider}/{_short_model(settings.reasoning.model)}")
+    print(f"  \033[1mCompression\033[0m  {settings.compression.provider}/{_short_model(settings.compression.model)}")
+    print(f"  \033[1mFast Path\033[0m    {settings.fast_path.provider}/{_short_model(settings.fast_path.model)}")
+    print(f"  \033[1mTools\033[0m        {len(agent.tools.list_tools())} registered")
+    print("  " + "\033[90m" + "-" * 52 + "\033[0m")
+    print("  Type \033[1m/help\033[0m for commands, \033[1m/quit\033[0m to exit")
     print()
 
+    # --- Proactive memory recall at session start ---
+    from core.intent_tracker import IntentTracker
+    tracker = IntentTracker()
+    resume = tracker.get_resume_prompt()
+    if resume:
+        print(f"  \033[93m[Memory]\033[0m {resume}")
+        print()
+
+    # Check soft memory count
+    db_path = agent.memory.soft.DB_PATH
+    if db_path.exists():
+        import sqlite3
+        with sqlite3.connect(str(db_path)) as conn:
+            mem_count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        if mem_count > 0:
+            print(f"  \033[90m[{mem_count} memories loaded]\033[0m")
+            print()
+
+    # --- Main loop ---
     while True:
         try:
-            user_input = input("  You: ").strip()
+            user_input = input("  \033[1;32mYou\033[0m: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
@@ -185,57 +214,66 @@ def cmd_chat(args, settings: Settings):
                     try:
                         settings.resolve_provider(cmd[1])
                         agent = build_agent(settings)
-                        print(f"  Switched reasoning to {settings.reasoning.provider}/{settings.reasoning.model}")
+                        print(f"  Switched to \033[1m{settings.reasoning.provider}/{_short_model(settings.reasoning.model)}\033[0m")
                     except ValueError as e:
-                        print(f"  {e}")
+                        print(f"  \033[31m{e}\033[0m")
                 else:
                     print(f"  Reasoning: {settings.reasoning.provider} | Available: {', '.join(PROVIDERS.keys())}")
                 continue
             if cmd[0] == "/help":
-                print("  /quit          -- Exit")
-                print("  /clear         -- Clear screen")
-                print("  /provider <n>  -- Switch reasoning provider")
-                print("  /provider      -- Show current provider")
-                print("  /models        -- Show all 3 model roles")
-                print("  /memory        -- Show memory stats")
-                print("  /help          -- This help")
+                print("  \033[1mCommands:\033[0m")
+                print("    /quit          Exit")
+                print("    /clear         Clear screen")
+                print("    /provider <n>  Switch reasoning provider")
+                print("    /provider      Show current provider")
+                print("    /models        Show all 3 model roles")
+                print("    /memory        Show memory stats")
+                print("    /tools         List registered tools")
+                print("    /help          This help")
                 continue
             if cmd[0] == "/models":
-                print(f"  Reasoning   : {settings.reasoning.provider}/{settings.reasoning.model}")
-                print(f"  Compression : {settings.compression.provider}/{settings.compression.model}")
-                print(f"  Fast Path   : {settings.fast_path.provider}/{settings.fast_path.model}")
+                print(f"  Reasoning   : \033[1m{settings.reasoning.provider}/{settings.reasoning.model}\033[0m")
+                print(f"  Compression : \033[1m{settings.compression.provider}/{settings.compression.model}\033[0m")
+                print(f"  Fast Path   : \033[1m{settings.fast_path.provider}/{settings.fast_path.model}\033[0m")
                 continue
             if cmd[0] == "/memory":
-                db_path = agent.memory.soft.DB_PATH
                 if db_path.exists():
                     import sqlite3
                     with sqlite3.connect(str(db_path)) as conn:
                         count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-                    print(f"  Soft memory: {count} memories stored ({db_path})")
+                    print(f"  Soft memory: \033[1m{count}\033[0m memories ({db_path})")
                 else:
-                    print(f"  Soft memory: empty (no memories yet)")
+                    print(f"  Soft memory: empty")
+                trace = agent.memory.get_recall_trace()
+                if trace:
+                    print(f"  Last recall: {len(trace)} memories queried")
                 continue
-            print(f"  Unknown command: {cmd[0]}. Type /help")
+            if cmd[0] == "/tools":
+                for t in agent.tools.list_tools():
+                    print(f"  \033[36mACT:{t.upper()}\033[0m")
+                continue
+            print(f"  Unknown: {cmd[0]}. Type /help")
             continue
 
-        # Run agent
+        # --- Run agent ---
         result = asyncio.run(agent.run(user_input))
 
-        # Response
-        print(f"\n  Zenith: {result.final_response}")
+        # Response with color
+        print(f"\n  \033[1;35mZenith\033[0m: {result.final_response}")
 
-        # Stats line: tokens in/out, model, tools
+        # Stats line
         ts = agent._token_stats
         model_display = _short_model(ts.get("model", settings.reasoning.model))
-        stats_parts = [f"model={settings.reasoning.provider}/{model_display}"]
+        stats = []
         if ts["prompt"] > 0:
-            stats_parts.append(f"in={ts['prompt']}")
-            stats_parts.append(f"out={ts['completion']}")
+            stats.append(f"\033[32min={ts['prompt']}\033[0m")
+            stats.append(f"\033[31mout={ts['completion']}\033[0m")
         if result.tool_calls_made > 0:
-            stats_parts.append(f"tools={result.tool_calls_made}")
+            stats.append(f"\033[36mtools={result.tool_calls_made}\033[0m")
         if result.iteration > 1:
-            stats_parts.append(f"iter={result.iteration}")
-        print(f"  [{', '.join(stats_parts)}]")
+            stats.append(f"iter={result.iteration}")
+        stats.append(f"\033[90m{settings.reasoning.provider}/{model_display}\033[0m")
+        print(f"  [{'  '.join(stats)}]")
         # Reset for next turn
         ts["prompt"] = ts["completion"] = ts["total"] = 0
         print()

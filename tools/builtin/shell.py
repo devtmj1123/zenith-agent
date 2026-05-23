@@ -1,11 +1,27 @@
 import asyncio
+import re
 
 
 async def run_command(params: dict) -> dict:
     """Execute shell command.
-    params: {command: str, timeout: int=30}
+    params: {command: str, timeout: int=30, _context: str}
     """
     command = params.get("command")
+
+    # If no explicit command, try to extract from LLM context
+    if not command:
+        context = params.get("_context", "")
+        # Look for common patterns: "run: cmd", "command: cmd", code blocks
+        for pattern in [
+            r'(?:run|execute|command)[:\s]+`?([^`\n]+)`?',
+            r'```\w*\n?(.+?)```',
+            r'(?:ls|dir|cat|echo|pip|python|git|mkdir|rm|cp|mv|curl|ping)\s+[^\n]+',
+        ]:
+            m = re.search(pattern, context, re.IGNORECASE | re.DOTALL)
+            if m:
+                command = m.group(1).strip()
+                break
+
     if not command:
         return {"success": False, "error": "Missing 'command' parameter"}
 

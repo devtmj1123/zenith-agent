@@ -145,8 +145,9 @@ class AgentLoop:
         # Regulator check
         self.regulator.check_action(state, call.token, call.params)
 
-        # Execute
-        result = await self.tools.execute(call.token, call.params)
+        # Execute — strip ACT: prefix for tool lookup
+        tool_name = call.token.replace("ACT:", "").lower() if call.token.startswith("ACT:") else call.token
+        result = await self.tools.execute(tool_name, call.params)
         return result
 
     def _extract_tool_calls(self, content: str) -> List[CompiledAction]:
@@ -157,7 +158,7 @@ class AgentLoop:
         # Pattern: ACT:TOKEN or tool_name(params)
         patterns = [
             (r'ACT:(\w+)', lambda m: CompiledAction(
-                token=f"ACT:{m.group(1)}", params={},
+                token=f"ACT:{m.group(1)}", params={"_context": content},
                 execution_target=None, confidence=0.8
             )),
             (r'(\w+)\(([^)]*)\)', lambda m: CompiledAction(
@@ -170,6 +171,7 @@ class AgentLoop:
             for match in re.finditer(pattern, content):
                 compiled = self.codebook.compile(match.group(0))
                 if compiled:
+                    compiled.params.setdefault("_context", content)
                     calls.append(compiled)
                 else:
                     calls.append(builder(match))
