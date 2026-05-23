@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zenith-agent"
+version = "1.0.0"
+description = "Zenith-OS — Super Agent Operating System"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.25",
+    "pyyaml>=6.0",
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+server = ["fastapi>=0.100", "uvicorn>=0.23"]
+tts = ["edge-tts>=6.1"]
+memory = ["sentence-transformers>=2.2"]
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+include = ["core*", "memory*", "filters*", "config*", "api*", "dynamic_tools*", "tools*", "tts*"]
+
+[project.scripts]
+zenith = "main:main"

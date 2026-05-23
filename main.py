@@ -6,6 +6,11 @@ import logging
 import sys
 from pathlib import Path
 
+# Ensure project root is on sys.path (for `pip install -e .` and `zenith` CLI)
+_root = Path(__file__).resolve().parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+
 from config.settings import Settings
 from core.agent_loop import AgentLoop
 from core.tools_manager import ToolsManager
