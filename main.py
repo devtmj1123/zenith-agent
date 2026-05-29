@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Zenith-OS -- Super Agent Operating System"""
 from __future__ import annotations
-import argparse
 import asyncio
 import logging
 import sys
@@ -11,6 +10,7 @@ _root = Path(__file__).resolve().parent
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
+import typer
 from config.settings import Settings, PROVIDERS
 from core.agent_loop import AgentLoop
 from core.tools_manager import ToolsManager
@@ -18,22 +18,26 @@ from core.memory_compressor import MemoryCompressor
 from core.codebook_compiler import CodebookCompiler
 from memory.soft_memory import SoftMemory
 
-
-log = logging.getLogger("zenith")
+app = typer.Typer(
+    name="zenith",
+    help="Zenith-OS -- Super Agent Operating System",
+    no_args_is_help=True,
+)
 
 
 # --- LLM Client ---
 
-async def llm_call_for_role(role: "ModelRole", messages: list,
-                            system_prompt: str = "", max_tokens: int = 2000) -> dict:
+async def llm_call_for_role(role, messages: list,
+                            system_prompt: str = "", max_tokens: int = 2000,
+                            tools=None) -> dict:
     """Generic LLM call for any model role."""
     import httpx
 
-    if not system_prompt:
-        system_prompt = "You are Zenith, a proactive AI agent. Be concise."
-
-    api_messages = [{"role": "system", "content": system_prompt}]
-    api_messages.extend(messages[-20:])
+    if system_prompt:
+        api_messages = [{"role": "system", "content": system_prompt}]
+        api_messages.extend(messages[-20:])
+    else:
+        api_messages = messages
 
     headers = {
         "Authorization": f"Bearer {role.api_key}",
@@ -44,6 +48,8 @@ async def llm_call_for_role(role: "ModelRole", messages: list,
         "messages": api_messages,
         "max_tokens": max_tokens,
     }
+    if tools:
+        payload["tools"] = tools
 
     timeout = 15 if role.provider == "ollama" else 60
 
@@ -57,23 +63,33 @@ async def llm_call_for_role(role: "ModelRole", messages: list,
         data = resp.json()
 
     choice = data["choices"][0]
+    message = choice["message"]
     usage = data.get("usage", {})
 
-    return {
-        "content": choice["message"]["content"],
+    content = message.get("content") or ""
+    reasoning = message.get("reasoning_content") or ""
+    if not content.strip() and reasoning.strip():
+        content = reasoning
+
+    result = {
+        "content": content,
+        "reasoning_content": reasoning,
         "tokens_used": usage.get("total_tokens", 0),
         "prompt_tokens": usage.get("prompt_tokens", 0),
         "completion_tokens": usage.get("completion_tokens", 0),
         "model": data.get("model", role.model),
     }
+    if "tool_calls" in message and message["tool_calls"]:
+        result["tool_calls"] = message["tool_calls"]
+
+    return result
 
 
 # --- Agent Builder ---
 
-def build_agent(settings: Settings) -> AgentLoop:
+def build_agent(settings: Settings, on_event=None) -> AgentLoop:
     tools_manager = ToolsManager()
 
-    # Register builtin tools
     from tools.builtin import BUILTIN_TOOLS
     for name, fn in BUILTIN_TOOLS.items():
         tools_manager.register(name, fn)
@@ -81,38 +97,22 @@ def build_agent(settings: Settings) -> AgentLoop:
     soft_memory = SoftMemory()
     codebook = CodebookCompiler()
 
-    # Token tracking (mutable container shared across calls)
     token_stats = {"prompt": 0, "completion": 0, "total": 0, "model": ""}
-    tool_list = tools_manager.list_tools()
 
-    # REASONING model — main thinking + tool calls
-    async def _reasoning_call(messages, compressed_context=""):
-        sys = (
-            "You are Zenith, a proactive AI agent. Be concise and direct.\n\n"
-            "You have these tools — use them by outputting ACT:TOOL_NAME:\n"
+    async def _reasoning_call(messages, compressed_context="", tools=None):
+        result = await llm_call_for_role(
+            settings.reasoning, messages, tools=tools
         )
-        for t in tool_list:
-            sys += f"  - ACT:{t.upper()}\n"
-        sys += (
-            "\nTo use a tool, output exactly: ACT:TOOL_NAME\n"
-            "Example: ACT:RUN_COMMAND or ACT:READ_FILE\n"
-            "If you need no tools, just answer directly.\n"
-        )
-        if compressed_context:
-            sys += f"\nCompressed context: {compressed_context}"
-        result = await llm_call_for_role(settings.reasoning, messages, sys)
         token_stats["prompt"] += result.get("prompt_tokens", 0)
         token_stats["completion"] += result.get("completion_tokens", 0)
         token_stats["total"] += result.get("tokens_used", 0)
         token_stats["model"] = result.get("model", settings.reasoning.model)
         return result
 
-    # COMPRESSION model — summarize history
     async def _compression_call(messages):
         sys = "Compress this conversation history into a concise summary. Keep key facts, decisions, and context. Max 200 words."
         return await llm_call_for_role(settings.compression, messages, sys)
 
-    # FAST PATH model — quick approximate answers
     async def _fast_path_call(messages):
         sys = "Answer briefly in 1-2 sentences. Be fast and approximate."
         return await llm_call_for_role(settings.fast_path, messages, sys, max_tokens=200)
@@ -127,35 +127,89 @@ def build_agent(settings: Settings) -> AgentLoop:
         tools_manager=tools_manager,
         memory_compressor=memory_compressor,
         codebook=codebook,
+        settings=settings,
+        on_event=on_event,
     )
-    agent._token_stats = token_stats  # Attach for CLI display
+    agent._token_stats = token_stats
     return agent
+
+
+# --- Sanitize for Windows console ---
+
+def _sanitize_print(text: str) -> str:
+    """Remove emoji and special chars that break Windows cp1252."""
+    import re
+    return re.sub(r'[\U00010000-\U0010ffff☀-➿⭐❤✔✖❌❎➕➖➗✅✨⭐❗❕❓❔‼⁉〰〽ℹ⤴⤵▪▫▶◀◻◼◽◾⬅⬆⬇⬛⬜⏩⏪⏫⏬⏭⏮⏯⏰⏱⏲⏳⏸⏹⏺⏏‍⃣️⚕⚔⚖⚗⚙♻☢☣☦☪☮☯☸♀♂♈-♓♟♠♣♥♦♨♰♱♾⚒⚓⚠⚡⚪⚫⚰⚱⚽⚾⛄⛅⛈⛎⛏⛑⛓⛔⛩⛪⛰-⛵⛷-⛺⛽✂✅✈-✍✏✒✔✖✝✡✨✳✴❄❇❌❎❓-❕❗❣❤❥❮❯➕-➗➡➰➿⤴⤵⬅-⬇⬛⬜⭐⭕〰〽㊗㊙]', '', text)
 
 
 # --- CLI Commands ---
 
-def cmd_chat(args, settings: Settings):
+@app.command()
+def chat(
+    provider: str = typer.Option(None, "--provider", "-p", help="LLM provider (openai|groq|nvidia|ollama|mimo)"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
+):
     """Interactive chat mode."""
-    if args.provider:
-        settings.resolve_provider(args.provider)
+    settings = Settings()
+    settings.load_from_env()
+
+    if provider:
+        try:
+            settings.resolve_provider(provider)
+        except ValueError as e:
+            print(f"  \033[31m{e}\033[0m")
+            raise typer.Exit(1)
+
+    if debug:
+        settings.debug = True
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.WARNING)
 
     if not settings.is_configured():
-        print(f"\n  Error: No API key for '{settings.reasoning.provider}'.")
         env_key = PROVIDERS.get(settings.reasoning.provider, {}).get("env_key", "REASONING_API_KEY")
+        print(f"\n  Error: No API key for '{settings.reasoning.provider}'.")
         print(f"  Set {env_key} or use --provider ollama\n")
-        sys.exit(1)
+        raise typer.Exit(1)
 
-    agent = build_agent(settings)
+    # --- Event handler for streaming agent events ---
+    from core.types import EventType
 
-    # Preload embedding model so first message isn't slow
+    def _on_event(event):
+        safe = _sanitize_print(event.content)
+        if event.type == EventType.THINKING:
+            print(f"  \033[90m[Thinking] {safe}\033[0m")
+        elif event.type == EventType.ACTION:
+            print(f"  \033[36m[Tool] {safe}\033[0m")
+        elif event.type == EventType.OBSERVATION:
+            # Truncate long observations
+            if len(safe) > 200:
+                safe = safe[:200] + "..."
+            print(f"  \033[33m[Result] {safe}\033[0m")
+        elif event.type == EventType.RESPONSE:
+            # Narration / mid-task text
+            if safe.strip():
+                print(f"  \033[35m[Narrator] {safe}\033[0m")
+        elif event.type == EventType.ERROR:
+            print(f"  \033[31m[Error] {safe}\033[0m")
+        elif event.type == EventType.PERMISSION:
+            print(f"  \033[93m[Permission] {safe}\033[0m")
+        elif event.type == EventType.COMPRESSED:
+            print(f"  \033[90m[Compressed] {safe}\033[0m")
+
+    agent = build_agent(settings, on_event=_on_event)
+
+    # Preload embedding model
     import warnings
     warnings.filterwarnings("ignore", message=".*HF Hub.*")
-    from memory.soft_memory import SoftMemory
     if SoftMemory._embedding_model is None:
         print("  Loading embedding model...", end=" ", flush=True)
-        from sentence_transformers import SentenceTransformer
-        SoftMemory._embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-        print("done")
+        try:
+            from sentence_transformers import SentenceTransformer
+            SoftMemory._embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+            print("done")
+        except Exception:
+            print("skipped (not installed)")
 
     def _short_model(name: str) -> str:
         return name.split("/")[-1] if "/" in name else name
@@ -172,13 +226,16 @@ def cmd_chat(args, settings: Settings):
     print("  Type \033[1m/help\033[0m for commands, \033[1m/quit\033[0m to exit")
     print()
 
-    # --- Proactive memory recall at session start ---
-    from core.intent_tracker import IntentTracker
-    tracker = IntentTracker()
-    resume = tracker.get_resume_prompt()
-    if resume:
-        print(f"  \033[93m[Memory]\033[0m {resume}")
-        print()
+    # --- Proactive memory recall ---
+    try:
+        from core.intent_tracker import IntentTracker
+        tracker = IntentTracker()
+        resume = tracker.get_resume_prompt()
+        if resume:
+            print(f"  \033[93m[Memory]\033[0m {_sanitize_print(resume)}")
+            print()
+    except Exception:
+        pass
 
     # Check soft memory count
     db_path = agent.memory.soft.DB_PATH
@@ -190,10 +247,67 @@ def cmd_chat(args, settings: Settings):
             print(f"  \033[90m[{mem_count} memories loaded]\033[0m")
             print()
 
+    # --- TTS state ---
+    tts_enabled = False
+    tts_voice = "female"
+    dual_channel = None
+
+    def _init_tts():
+        nonlocal dual_channel
+        if dual_channel is None:
+            from tts.zenith_tts import ZenithTTS
+            from core.dual_channel import DualChannel
+            tts = ZenithTTS(voice=tts_voice)
+            dual_channel = DualChannel(tts_engine=tts)
+        return dual_channel
+
+    async def _speak(text: str):
+        if not tts_enabled:
+            return
+        try:
+            dc = _init_tts()
+            await dc.speak(text)
+        except Exception as e:
+            print(f"  \033[90mTTS error: {e}\033[0m")
+
+    # --- Tab completion ---
+    try:
+        from prompt_toolkit import PromptSession
+        from prompt_toolkit.completion import WordCompleter
+        from prompt_toolkit.styles import Style
+        from prompt_toolkit.formatted_text import HTML
+
+        slash_commands = [
+            "/quit", "/exit", "/q", "/clear", "/help",
+            "/provider", "/models", "/memory", "/tools",
+            "/tts", "/voice", "/speak",
+        ]
+        provider_names = list(PROVIDERS.keys())
+        voice_names = ["female", "male", "female_zh", "male_zh"]
+        all_completions = (
+            slash_commands
+            + [f"/provider {p}" for p in provider_names]
+            + [f"/voice {v}" for v in voice_names]
+            + ["/tts on", "/tts off"]
+        )
+
+        completer = WordCompleter(all_completions, ignore_case=True)
+        style = Style.from_dict({"prompt": "bold green"})
+        session = PromptSession(style=style)
+        _has_prompt_toolkit = True
+    except ImportError:
+        _has_prompt_toolkit = False
+
     # --- Main loop ---
     while True:
         try:
-            user_input = input("  \033[1;32mYou\033[0m: ").strip()
+            if _has_prompt_toolkit:
+                user_input = session.prompt(
+                    HTML("<prompt>  You</prompt>: "),
+                    completer=completer,
+                ).strip()
+            else:
+                user_input = input("  \033[1;32mYou\033[0m: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
@@ -213,7 +327,7 @@ def cmd_chat(args, settings: Settings):
                 if len(cmd) > 1:
                     try:
                         settings.resolve_provider(cmd[1])
-                        agent = build_agent(settings)
+                        agent = build_agent(settings, on_event=_on_event)
                         print(f"  Switched to \033[1m{settings.reasoning.provider}/{_short_model(settings.reasoning.model)}\033[0m")
                     except ValueError as e:
                         print(f"  \033[31m{e}\033[0m")
@@ -229,6 +343,9 @@ def cmd_chat(args, settings: Settings):
                 print("    /models        Show all 3 model roles")
                 print("    /memory        Show memory stats")
                 print("    /tools         List registered tools")
+                print("    /tts on|off    Toggle text-to-speech")
+                print("    /voice <name>  Change TTS voice (female/male/female_zh/male_zh)")
+                print("    /speak <text>  Speak text aloud")
                 print("    /help          This help")
                 continue
             if cmd[0] == "/models":
@@ -250,7 +367,37 @@ def cmd_chat(args, settings: Settings):
                 continue
             if cmd[0] == "/tools":
                 for t in agent.tools.list_tools():
-                    print(f"  \033[36mACT:{t.upper()}\033[0m")
+                    print(f"  \033[36m{t}\033[0m")
+                continue
+            if cmd[0] == "/tts":
+                if len(cmd) > 1 and cmd[1].lower() in ("on", "off"):
+                    tts_enabled = cmd[1].lower() == "on"
+                    print(f"  TTS: \033[1m{'ON' if tts_enabled else 'OFF'}\033[0m")
+                elif len(cmd) > 1 and cmd[1].lower() == "status":
+                    print(f"  TTS: \033[1m{'ON' if tts_enabled else 'OFF'}\033[0m | Voice: {tts_voice}")
+                else:
+                    print(f"  Usage: /tts on|off|status")
+                continue
+            if cmd[0] == "/voice":
+                if len(cmd) > 1:
+                    new_voice = cmd[1].lower()
+                    valid_voices = ["female", "male", "female_zh", "male_zh"]
+                    if new_voice in valid_voices:
+                        tts_voice = new_voice
+                        dual_channel = None  # Reset to pick up new voice
+                        print(f"  Voice: \033[1m{tts_voice}\033[0m")
+                    else:
+                        print(f"  Valid voices: {', '.join(valid_voices)}")
+                else:
+                    print(f"  Current voice: \033[1m{tts_voice}\033[0m")
+                    print(f"  Available: female, male, female_zh, male_zh")
+                continue
+            if cmd[0] == "/speak":
+                if len(cmd) > 1:
+                    text = " ".join(cmd[1:])
+                    asyncio.run(_speak(text))
+                else:
+                    print(f"  Usage: /speak <text>")
                 continue
             print(f"  Unknown: {cmd[0]}. Type /help")
             continue
@@ -258,8 +405,13 @@ def cmd_chat(args, settings: Settings):
         # --- Run agent ---
         result = asyncio.run(agent.run(user_input))
 
-        # Response with color
-        print(f"\n  \033[1;35mZenith\033[0m: {result.final_response}")
+        # Response
+        safe_response = _sanitize_print(result.final_response)
+        print(f"\n  \033[1;35mZenith\033[0m: {safe_response}")
+
+        # Auto-speak if TTS enabled
+        if tts_enabled and result.final_response:
+            asyncio.run(_speak(result.final_response))
 
         # Stats line
         ts = agent._token_stats
@@ -274,21 +426,35 @@ def cmd_chat(args, settings: Settings):
             stats.append(f"iter={result.iteration}")
         stats.append(f"\033[90m{settings.reasoning.provider}/{model_display}\033[0m")
         print(f"  [{'  '.join(stats)}]")
-        # Reset for next turn
         ts["prompt"] = ts["completion"] = ts["total"] = 0
         print()
 
 
-def cmd_check(args, settings: Settings):
+@app.command()
+def check(
+    provider: str = typer.Option(None, "--provider", "-p", help="LLM provider to test"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
+):
     """Health check."""
-    if args.provider:
-        settings.resolve_provider(args.provider)
+    settings = Settings()
+    settings.load_from_env()
+
+    if provider:
+        try:
+            settings.resolve_provider(provider)
+        except ValueError as e:
+            print(f"  \033[31m{e}\033[0m")
+            raise typer.Exit(1)
+
+    if debug:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.WARNING)
 
     print()
     print("  Zenith-OS Health Check")
     print("  " + "-" * 55)
 
-    # All 3 model roles
     for label, role in [
         ("REASONING", settings.reasoning),
         ("COMPRESSION", settings.compression),
@@ -301,15 +467,12 @@ def cmd_check(args, settings: Settings):
         print(f"    API Key  : {key_status}")
         print()
 
-    # Module imports
     checks = [
-        ("Physics constants", "memory.hard_memory", "PHYSICS_CONSTANTS"),
         ("Soft memory", "memory.soft_memory", "SoftMemory"),
-        ("Zero-error filter", "filters.zero_error_filter", "ZeroErrorFilter"),
-        ("Unit standardizer", "filters.unit_standardizer", "UnitStandardizer"),
-        ("Entropy brake", "filters.entropy_brake", "EntropyBrake"),
         ("Agent loop", "core.agent_loop", "AgentLoop"),
-        ("Failure library", "core.failure_library", "FAILURE_TREE"),
+        ("Tools manager", "core.tools_manager", "ToolsManager"),
+        ("Codebook", "core.codebook_compiler", "CodebookCompiler"),
+        ("Flow regulator", "core.flow_regulator", "FlowRegulator"),
     ]
 
     print()
@@ -324,7 +487,6 @@ def cmd_check(args, settings: Settings):
         except Exception as e:
             print(f"  {label:<20}: FAIL - {e}")
 
-    # API connectivity test (reasoning provider only)
     print()
     if settings.reasoning.is_configured():
         print(f"  Testing {settings.reasoning.provider} connection...", end=" ")
@@ -347,27 +509,57 @@ def cmd_check(args, settings: Settings):
     print()
 
 
-def cmd_server(args, settings: Settings):
-    """Start server."""
-    if args.provider:
-        settings.resolve_provider(args.provider)
+@app.command()
+def server(
+    provider: str = typer.Option(None, "--provider", "-p", help="LLM provider"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind host"),
+    port: int = typer.Option(8765, "--port", help="Bind port"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
+):
+    """Start WebSocket server."""
+    settings = Settings()
+    settings.load_from_env()
+
+    if provider:
+        try:
+            settings.resolve_provider(provider)
+        except ValueError as e:
+            print(f"  \033[31m{e}\033[0m")
+            raise typer.Exit(1)
+
+    if debug:
+        settings.debug = True
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.WARNING)
 
     if not settings.is_configured():
         print(f"Error: No API key for '{settings.reasoning.provider}'")
-        sys.exit(1)
+        raise typer.Exit(1)
 
     from api.server import ZenithServer
     agent = build_agent(settings)
-    server = ZenithServer(agent, host=args.host, port=args.port)
-    print(f"\n  Starting Zenith server on {args.host}:{args.port}")
+    server = ZenithServer(agent, host=host, port=port)
+    print(f"\n  Starting Zenith server on {host}:{port}")
     print(f"  Reasoning: {settings.reasoning.provider}/{settings.reasoning.model}")
     print(f"  Compression: {settings.compression.provider}/{settings.compression.model}\n")
     asyncio.run(server.start())
 
 
-def cmd_providers(args, settings: Settings):
-    """List available providers and current model roles."""
+@app.command(name="providers")
+def list_providers(
+    debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
+):
+    """List available LLM providers and current model roles."""
     import os
+    settings = Settings()
+    settings.load_from_env()
+
+    if debug:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.WARNING)
+
     print()
     print("  Available LLM Providers")
     print("  " + "-" * 55)
@@ -390,62 +582,8 @@ def cmd_providers(args, settings: Settings):
     print()
 
 
-# --- Main ---
-
 def main():
-    parser = argparse.ArgumentParser(
-        prog="zenith",
-        description="Zenith-OS -- Super Agent Operating System",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""examples:
-  zenith chat                          Start chat (default: groq)
-  zenith chat --provider nvidia        Use NVIDIA NIM
-  zenith chat --provider ollama        Use local Ollama (no key needed)
-  zenith check --provider groq         Test Groq connection
-  zenith server --port 9000            Start server on port 9000
-  zenith providers                     List all providers
-""",
-    )
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-
-    sub = parser.add_subparsers(dest="command", help="Command to run")
-
-    p_chat = sub.add_parser("chat", help="Interactive chat mode")
-    p_chat.add_argument("--provider", "-p", help="LLM provider (openai|groq|nvidia|ollama)")
-
-    p_check = sub.add_parser("check", help="Health check")
-    p_check.add_argument("--provider", "-p", help="LLM provider to test")
-
-    p_server = sub.add_parser("server", help="Start WebSocket server")
-    p_server.add_argument("--provider", "-p", help="LLM provider")
-    p_server.add_argument("--host", default="127.0.0.1", help="Bind host")
-    p_server.add_argument("--port", type=int, default=8765, help="Bind port")
-
-    sub.add_parser("providers", help="List available LLM providers")
-
-    args = parser.parse_args()
-
-    settings = Settings()
-    settings.load_from_env()
-
-    if args.debug:
-        settings.debug = True
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.WARNING)
-
-    commands = {
-        "chat": cmd_chat,
-        "check": cmd_check,
-        "server": cmd_server,
-        "providers": cmd_providers,
-    }
-
-    if args.command in commands:
-        commands[args.command](args, settings)
-    else:
-        parser.print_help()
-
+    app()
 
 if __name__ == "__main__":
     main()
