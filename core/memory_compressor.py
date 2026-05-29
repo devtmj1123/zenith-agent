@@ -89,14 +89,56 @@ class MemoryCompressor:
         self._recall_trace.clear()
 
     async def store_interaction(self, user_msg: str, assistant_msg: str,
-                                 session_id: str = ""):
-        """Store interaction in soft memory for future recall."""
+                                 session_id: str = "",
+                                 tool_calls_made: int = 0,
+                                 last_tool_token: str = ""):
+        """Store interaction in soft memory for future recall.
+
+        Context-aware filtering: preserves audit trails and state transitions,
+        only skips pure conversational noise with no action context.
+        """
+        import re
+
+        # Rule 1: If system executed tools, this interaction has action context.
+        # Must be preserved — the user's approval/response is part of the audit trail.
+        if tool_calls_made > 0:
+            await self._write_interaction(user_msg, assistant_msg, session_id, confidence=0.8)
+            return
+
+        # Rule 2: If the assistant message references actions taken, preserve it
+        action_indicators = [
+            r'\b(executed|ran|created|deleted|sent|opened|modified|wrote|installed)\b',
+            r'\b(command|file|email|calendar|task|reminder)\b',
+            r'ACT:',
+        ]
+        for pattern in action_indicators:
+            if re.search(pattern, assistant_msg, re.I):
+                await self._write_interaction(user_msg, assistant_msg, session_id, confidence=0.7)
+                return
+
+        # Rule 3: Short messages with business/physics keywords — preserve
+        if len(user_msg.strip()) < 20:
+            high_value = r'\b(cal|task|mail|btc|eth|flux|l_d|e_a|deploy|fix|bug|error|config|env)\b'
+            if re.search(high_value, user_msg.lower()):
+                await self._write_interaction(user_msg, assistant_msg, session_id, confidence=0.7)
+                return
+
+        # Rule 4: Pure conversational noise with no action context — skip
+        pure_noise = {"hi", "hello", "hey", "ok", "thanks", "test", "testing"}
+        if user_msg.strip().lower() in pure_noise and tool_calls_made == 0:
+            return
+
+        # Rule 5: Everything else — preserve (default to remembering)
+        await self._write_interaction(user_msg, assistant_msg, session_id, confidence=0.6)
+
+    async def _write_interaction(self, user_msg: str, assistant_msg: str,
+                                  session_id: str, confidence: float):
         content = f"User: {user_msg}\nAssistant: {assistant_msg}"
         await self.soft.write(
             content=content,
             session_id=session_id,
             layer="episodic",
-            confidence=0.7
+            confidence=confidence,
         )
 
     def _messages_to_text(self, messages: List[dict]) -> str:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 import hashlib
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from core.types import CompiledAction
 
@@ -8,8 +8,6 @@ from core.types import CompiledAction
 class SpeculativeEngine:
     def __init__(self):
         self._cache: Dict[str, dict] = {}
-        self._hit_count = 0
-        self._miss_count = 0
 
     def predict_next(self, current_action: CompiledAction,
                      history: List[CompiledAction]) -> List[str]:
@@ -40,17 +38,3 @@ class SpeculativeEngine:
             cache_key = hashlib.md5(action.encode()).hexdigest()[:8]
             if cache_key not in self._cache:
                 self._cache[cache_key] = {"action": action, "prewarmed": True}
-
-    def lookup(self, action: str) -> Optional[dict]:
-        cache_key = hashlib.md5(action.encode()).hexdigest()[:8]
-        result = self._cache.get(cache_key)
-        if result:
-            self._hit_count += 1
-        else:
-            self._miss_count += 1
-        return result
-
-    @property
-    def hit_rate(self) -> float:
-        total = self._hit_count + self._miss_count
-        return self._hit_count / total if total > 0 else 0.0

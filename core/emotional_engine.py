@@ -42,14 +42,3 @@ class EmotionalEngine:
         if self.mood == Mood.FOCUSED:
             return "User is in flow. Minimize interruptions."
         return ""
-
-    def physical_intuition(self, context: str) -> str:
-        """Zero-token physical intuition based on context keywords."""
-        ctx = context.lower()
-        if any(w in ctx for w in ["heat", "temperature", "thermal"]):
-            return "Consider thermal equilibrium and heat transfer direction."
-        if any(w in ctx for w in ["force", "push", "pull", "acceleration"]):
-            return "Consider Newton's third law and force balance."
-        if any(w in ctx for w in ["electric", "voltage", "current"]):
-            return "Consider Ohm's law and Kirchhoff's circuit laws."
-        return ""

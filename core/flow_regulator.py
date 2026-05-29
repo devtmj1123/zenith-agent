@@ -11,7 +11,7 @@ from core.types import (
 
 
 class FlowRegulator:
-    CIRCUIT_BREAK_THRESHOLD = 3
+    CIRCUIT_BREAK_THRESHOLD = 5
     ACTION_HISTORY_WINDOW = 10
 
     def __init__(self):

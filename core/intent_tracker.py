@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 
 from core.types import TaskNode
 
-TASK_DB_PATH = Path(".zenith/task_tree.json")
+TASK_DB_PATH = Path.home() / ".zenith" / "task_tree.json"
 
 
 class IntentTracker:
@@ -31,6 +31,11 @@ class IntentTracker:
 
     def create_task(self, goal: str, session_id: str,
                     parent_id: Optional[str] = None) -> str:
+        # Skip trivial messages — short inputs without action intent
+        stripped = goal.strip()
+        if len(stripped) < 8 and "?" not in stripped and "!" not in stripped:
+            return ""
+
         task_id = str(uuid.uuid4())[:8]
         node = TaskNode(
             task_id=task_id,
@@ -56,6 +61,29 @@ class IntentTracker:
             self._tasks[task_id].status = "completed"
             self._tasks[task_id].progress_summary = summary
             self._tasks[task_id].updated_at = time.time()
+            self._save()
+
+    def delete_task(self, task_id: str) -> bool:
+        """Delete a task by ID (supports partial match)."""
+        # Try exact match first
+        if task_id in self._tasks:
+            del self._tasks[task_id]
+            self._save()
+            return True
+        # Try partial match (prefix)
+        matches = [tid for tid in self._tasks if tid.startswith(task_id)]
+        if len(matches) == 1:
+            del self._tasks[matches[0]]
+            self._save()
+            return True
+        return False
+
+    def clear_completed(self):
+        """Remove all completed tasks."""
+        to_remove = [tid for tid, t in self._tasks.items() if t.status == "completed"]
+        for tid in to_remove:
+            del self._tasks[tid]
+        if to_remove:
             self._save()
 
     def get_pending_tasks(self, max_age_days: float = 7.0) -> List[TaskNode]:
