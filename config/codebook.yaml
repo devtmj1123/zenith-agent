@@ -1,270 +1,347 @@
-# Zenith Codebook — action definitions for intent compilation
-# Keep it minimal. ~50 actions. Karpathy says start small.
-
-# ── Browser ──────────────────────────────────────────────
-- token: "ACT:CLICK"
-  patterns: ["\\bclick\\b", "\\bpress\\b", "\\btap\\b", "\\bpush\\b"]
-  target: webmcp
-  description: "Click an element on the page"
-  params_schema:
-    element: "string — CSS selector or description"
-  risk_level: low
-
-- token: "ACT:TYPE"
-  patterns: ["\\btype\\b", "\\binput\\b", "\\benter text\\b", "\\bfill\\b", "\\bwrite into\\b"]
-  target: webmcp
-  description: "Type text into an input field"
-  params_schema:
-    text: "string — text to type"
-    target: "string — selector or field name"
-  risk_level: low
-
-- token: "ACT:SCROLL"
-  patterns: ["\\bscroll\\b", "\\bswipe\\b", "\\bscroll down\\b", "\\bscroll up\\b"]
-  target: webmcp
-  description: "Scroll the page"
-  params_schema:
-    direction: "string — up/down/left/right"
-  risk_level: low
-
-- token: "ACT:NAVIGATE"
-  patterns: ["\\bnavigate\\b", "\\bgo to\\b", "\\bopen url\\b", "\\bvisit\\b", "\\bbrowse to\\b"]
-  target: webmcp
-  description: "Navigate to a URL"
-  params_schema:
-    url: "string — target URL"
-  risk_level: low
-
-- token: "ACT:NEW_TAB"
-  patterns: ["\\bnew tab\\b", "\\bopen tab\\b", "\\bopen a tab\\b"]
-  target: webmcp
-  description: "Open a new browser tab"
-  params_schema:
-    url: "string — optional URL to open"
-  risk_level: low
-
-- token: "ACT:CLOSE_TAB"
-  patterns: ["\\bclose tab\\b", "\\bclose the tab\\b", "\\bclose browser\\b"]
-  target: webmcp
-  description: "Close the current tab"
-  params_schema: {}
-  risk_level: medium
-
-- token: "ACT:GET_ELEMENTS"
-  patterns: ["\\bget elements\\b", "\\bfind elements\\b", "\\blist elements\\b", "\\bget buttons\\b", "\\bget links\\b"]
-  target: webmcp
-  description: "Get interactive elements on the page"
-  params_schema:
-    selector: "string — CSS selector filter"
-  risk_level: low
-
-- token: "ACT:SCREENSHOT"
-  patterns: ["\\bscreenshot\\b", "\\btake screenshot\\b", "\\bcapture screen\\b", "\\bprint screen\\b"]
-  target: webmcp
-  description: "Take a screenshot of the current page"
-  params_schema: {}
-  risk_level: low
+# Zenith Codebook — 15 grouped tools
+# Grouped: calendar (5→1), spreadsheet (3→1)
 
 # ── File ─────────────────────────────────────────────────
 - token: "ACT:READ_FILE"
-  patterns: ["\\bread file\\b", "\\bread the file\\b", "\\bread\\b", "\\bopen file\\b", "\\bshow file\\b", "\\bcat\\b", "\\bview file\\b"]
+  patterns: ["\\bread\\b", "\\bopen file\\b", "\\bcat\\b", "\\bshow file\\b", "\\bview file\\b"]
   target: file
-  description: "Read a file from disk"
+  description: "Read a file (default: 500 lines). Use start_line/end_line (1-based) or offset/limit for large files. Returns numbered content. params: {path, start_line?, end_line?, offset?, limit?}"
   params_schema:
-    path: "string — file path"
+    path: "string"
+    start_line: "number"
+    end_line: "number"
+    offset: "number"
+    limit: "number"
   risk_level: low
 
 - token: "ACT:WRITE_FILE"
-  patterns: ["\\bwrite file\\b", "\\bcreate file\\b", "\\bsave file\\b", "\\bsave to\\b", "\\bwrite to\\b"]
+  patterns: ["\\bwrite\\b", "\\bsave\\b", "\\bcreate file\\b"]
   target: file
-  description: "Write content to a file"
+  description: "Write content to a file. params: {path, content}"
   params_schema:
-    path: "string — file path"
-    content: "string — file content"
+    path: "string"
+    content: "string"
   risk_level: medium
 
 - token: "ACT:EDIT_FILE"
-  patterns: ["\\bedit file\\b", "\\bmodify file\\b", "\\bupdate file\\b", "\\breplace in\\b", "\\bfind and replace\\b"]
+  patterns: ["\\bedit\\b", "\\bmodify\\b", "\\breplace in\\b"]
   target: file
-  description: "Edit an existing file"
+  description: "Find and replace text in a file. Returns unified diff. flexible=true normalizes whitespace. Fails if old_text matches multiple times unless replace_all=true. params: {path, old_text, new_text, replace_all?, flexible?}"
   params_schema:
-    path: "string — file path"
-    old_text: "string — text to find"
-    new_text: "string — replacement text"
+    path: "string"
+    old_text: "string"
+    new_text: "string"
+    replace_all: "boolean"
+    flexible: "boolean"
   risk_level: medium
 
 - token: "ACT:DELETE_FILE"
-  patterns: ["\\bdelete file\\b", "\\bremove file\\b", "\\bunlink\\b"]
+  patterns: ["\\bdelete file\\b", "\\bremove file\\b"]
   target: file
-  description: "Delete a file"
+  description: "Delete a file. params: {path}"
   params_schema:
-    path: "string — file path"
+    path: "string"
   risk_level: high
 
 - token: "ACT:LIST_DIR"
-  patterns: ["\\blist dir\\b", "\\blist files\\b", "\\bshow files\\b", "\\bdir\\b", "\\bls\\b", "\\bwhat files\\b"]
+  patterns: ["\\blist\\b", "\\bls\\b", "\\bdir\\b", "\\bwhat files\\b", "\\bshow files\\b"]
   target: file
-  description: "List files in a directory"
+  description: "List directory contents. params: {path}"
   params_schema:
-    path: "string — directory path"
+    path: "string"
   risk_level: low
 
-- token: "ACT:MKDIR"
-  patterns: ["\\bmake dir\\b", "\\bmkdir\\b", "\\bcreate folder\\b", "\\bcreate directory\\b"]
+- token: "ACT:GLOB_SEARCH"
+  patterns: ["\\bglob\\b", "\\bfind files\\b", "\\bfile pattern\\b", "\\bmatching files\\b"]
   target: file
-  description: "Create a directory"
+  description: "Find files by glob pattern. params: {pattern, path?}. Example: **/*.py, src/**/*.ts"
   params_schema:
-    path: "string — directory path"
+    pattern: "string"
+    path: "string"
+  risk_level: low
+
+- token: "ACT:GREP_SEARCH"
+  patterns: ["\\bgrep\\b", "\\bsearch in files\\b", "\\bfind in code\\b", "\\bsearch code\\b", "\\bcontent search\\b"]
+  target: file
+  description: "Search file contents with regex. Uses ripgrep if available. params: {pattern, path?, glob?, output_mode?}. output_mode: files_with_matches|content|count"
+  params_schema:
+    pattern: "string"
+    path: "string"
+    glob: "string"
+    output_mode: "string"
   risk_level: low
 
 # ── Shell ────────────────────────────────────────────────
 - token: "ACT:RUN_COMMAND"
-  patterns: ["\\brun command\\b", "\\bexecute\\b", "\\brun\\b", "\\bshell\\b", "\\bterminal\\b", "\\bbash\\b"]
+  patterns: ["\\brun\\b", "\\bexecute\\b", "\\bshell\\b", "\\bterminal\\b", "\\bcmd\\b"]
   target: shell
-  description: "Run a shell command"
+  description: "Run a shell command. Use run_in_background for long-running commands (npm install, builds). Use stdin for interactive prompts. Default timeout 120s."
   params_schema:
-    command: "string — command to execute"
+    command: "string"
+    stdin: "string"
+    timeout: "number"
+    run_in_background: "boolean"
   risk_level: high
 
-- token: "ACT:PYTHON_EXEC"
-  patterns: ["\\bpython\\b", "\\brun python\\b", "\\bexecute python\\b", "\\beval\\b"]
+- token: "ACT:CHECK_BACKGROUND"
+  patterns: ["\\bcheck background\\b", "\\bcheck task\\b", "\\bbackground status\\b"]
   target: shell
-  description: "Execute Python code"
+  description: "Check status of a background command. params: {task_id?} — omit task_id to list all."
   params_schema:
-    code: "string — Python code to run"
-  risk_level: high
-
-- token: "ACT:GIT"
-  patterns: ["\\bgit\\b", "\\bgit commit\\b", "\\bgit push\\b", "\\bgit pull\\b", "\\bgit status\\b"]
-  target: shell
-  description: "Run a git command"
-  params_schema:
-    subcommand: "string — git subcommand and args"
-  risk_level: medium
+    task_id: "string"
+  risk_level: low
 
 # ── Web ──────────────────────────────────────────────────
 - token: "ACT:WEB_SEARCH"
-  patterns: ["\\bsearch\\b", "\\bfind\\b", "\\blook up\\b", "\\bgoogle\\b", "\\bsearch for\\b"]
+  patterns: ["\\bsearch\\b", "\\bgoogle\\b", "\\bfind info\\b", "\\blook up\\b"]
   target: webmcp
-  description: "Search the web"
+  description: "Search the web for information. params: {query, max_results?, allowed_domains?, blocked_domains?}"
   params_schema:
-    query: "string — search query"
-  risk_level: low
-
-- token: "ACT:SCRAPE"
-  patterns: ["\\bscrape\\b", "\\bextract from\\b", "\\bget data from\\b", "\\bparse page\\b"]
-  target: webmcp
-  description: "Scrape content from a webpage"
-  params_schema:
-    url: "string — target URL"
-    selector: "string — CSS selector for content"
+    query: "string"
+    max_results: "number"
+    allowed_domains: "array"
+    blocked_domains: "array"
   risk_level: low
 
 - token: "ACT:FETCH"
-  patterns: ["\\bfetch\\b", "\\bhttp get\\b", "\\brequest\\b", "\\bapi call\\b", "\\bget url\\b"]
+  patterns: ["\\bfetch\\b", "\\bget url\\b", "\\bhttp\\b"]
   target: webmcp
-  description: "Fetch content from a URL"
+  description: "Fetch and read URL content. params: {url}"
   params_schema:
-    url: "string — URL to fetch"
-    method: "string — HTTP method (default GET)"
+    url: "string"
   risk_level: low
 
-# ── Desktop ──────────────────────────────────────────────
-- token: "ACT:GET_UI_TREE"
-  patterns: ["\\bui tree\\b", "\\bget ui\\b", "\\baccessibility tree\\b", "\\bui elements\\b", "\\bget windows\\b"]
-  target: uia
-  description: "Get the desktop UI accessibility tree"
+- token: "ACT:SCRAPE"
+  patterns: ["\\bscrape\\b", "\\bextract from\\b", "\\bparse page\\b"]
+  target: webmcp
+  description: "Scrape a webpage to clean markdown. params: {url}"
   params_schema:
-    window: "string — optional window title filter"
-  risk_level: low
-
-- token: "ACT:CLICK_ELEMENT"
-  patterns: ["\\bclick element\\b", "\\bclick on\\b", "\\bclick button\\b", "\\bpress button\\b"]
-  target: uia
-  description: "Click a desktop UI element"
-  params_schema:
-    element: "string — element name or automation ID"
-  risk_level: low
-
-- token: "ACT:TYPE_TEXT"
-  patterns: ["\\btype text\\b", "\\btype into\\b", "\\benter text in\\b", "\\bfill field\\b"]
-  target: uia
-  description: "Type text into a desktop field"
-  params_schema:
-    text: "string — text to type"
-    target: "string — field name or automation ID"
-  risk_level: low
-
-- token: "ACT:FOCUS_WINDOW"
-  patterns: ["\\bfocus window\\b", "\\bbring to front\\b", "\\bactivate window\\b", "\\bswitch to\\b"]
-  target: uia
-  description: "Focus a desktop window"
-  params_schema:
-    window: "string — window title"
-  risk_level: low
-
-# ── System ───────────────────────────────────────────────
-- token: "ACT:GET_TIME"
-  patterns: ["\\bwhat time\\b", "\\bcurrent time\\b", "\\bget time\\b", "\\bdate\\b", "\\btoday\\b"]
-  target: system
-  description: "Get the current date and time"
-  params_schema: {}
-  risk_level: low
-
-- token: "ACT:GET_ENV"
-  patterns: ["\\benv var\\b", "\\benvironment variable\\b", "\\bget env\\b", "\\bprintenv\\b"]
-  target: system
-  description: "Get an environment variable"
-  params_schema:
-    name: "string — variable name"
-  risk_level: low
-
-- token: "ACT:CLIPBOARD"
-  patterns: ["\\bclipboard\\b", "\\bcopy to clipboard\\b", "\\bpaste\\b", "\\bget clipboard\\b"]
-  target: system
-  description: "Access the system clipboard"
-  params_schema:
-    action: "string — get/set"
-    content: "string — content to set (if action=set)"
+    url: "string"
   risk_level: low
 
 # ── Memory ───────────────────────────────────────────────
 - token: "ACT:RECALL"
-  patterns: ["\\brecall\\b", "\\bremember\\b", "\\bwhat did i\\b", "\\bmemory\\b", "\\bwhat was\\b"]
+  patterns: ["\\brecall\\b", "\\bremember\\b", "\\bwhat did\\b", "\\bmemory\\b"]
   target: system
-  description: "Recall information from memory"
+  description: "Search memory for past conversations. params: {query}"
   params_schema:
-    query: "string — what to recall"
+    query: "string"
   risk_level: low
 
 - token: "ACT:STORE_MEMORY"
-  patterns: ["\\bremember that\\b", "\\bstore\\b", "\\bsave to memory\\b", "\\bnote that\\b", "\\bkeep in mind\\b"]
+  patterns: ["\\bremember that\\b", "\\bstore\\b", "\\bsave to memory\\b", "\\bnote that\\b"]
   target: system
-  description: "Store information in memory"
+  description: "Store information in long-term memory. params: {content}"
   params_schema:
-    content: "string — what to remember"
+    content: "string"
   risk_level: low
 
-- token: "ACT:COMPRESS_MEMORY"
-  patterns: ["\\bcompress memory\\b", "\\bsummarize context\\b", "\\bcompress context\\b"]
+# ── System ───────────────────────────────────────────────
+- token: "ACT:GET_TIME"
+  patterns: ["\\bwhat time\\b", "\\bdate\\b", "\\btoday\\b", "\\btime\\b"]
   target: system
-  description: "Compress memory/context to save tokens"
+  description: "Get current date and time. No params."
   params_schema: {}
   risk_level: low
 
-# ── Application ──────────────────────────────────────────
-- token: "ACT:OPEN_APP"
-  patterns: ["\\bopen\\b", "\\blaunch\\b", "\\bstart\\b", "\\brun app\\b", "\\bopen app\\b"]
-  target: shell
-  description: "Launch an application"
+- token: "ACT:GET_WEATHER"
+  patterns: ["\\bweather\\b", "\\btemperature\\b", "\\bforecast\\b", "\\bhow hot\\b", "\\brain\\b", "\\bsunny\\b"]
+  target: system
+  description: "Get current weather for a location. params: {location}"
   params_schema:
-    app: "string — application name"
+    location: "string"
   risk_level: low
 
-- token: "ACT:CLOSE_APP"
-  patterns: ["\\bclose app\\b", "\\bkill\\b", "\\bquit\\b", "\\bstop app\\b", "\\bexit app\\b"]
-  target: shell
-  description: "Close an application"
+# ── Document Processing ─────────────────────────────────
+- token: "ACT:PARSE_DOCUMENT"
+  patterns: ["\\bread pdf\\b", "\\bparse\\b", "\\bprocess file\\b", "\\bopen excel\\b", "\\bopen csv\\b", "\\bread excel\\b", "\\bread csv\\b", "\\bextract data\\b"]
+  target: file
+  description: "Parse document (PDF/Excel/CSV/DOCX/JSON). params: {path}"
   params_schema:
-    app: "string — application name"
+    path: "string"
+  risk_level: low
+
+# ── Spreadsheet (grouped) ──
+- token: "ACT:SPREADSHEET"
+  patterns: ["\\bwrite csv\\b", "\\bcreate csv\\b", "\\bwrite excel\\b", "\\bcreate excel\\b", "\\bfill form\\b", "\\bfill template\\b", "\\bpopulate\\b"]
+  target: file
+  description: "Spreadsheet operations. action: write_csv {path,headers,rows} | write_excel {path,sheets} | fill_form {template_path,output_path,data}"
+  params_schema:
+    action: "string"
+    path: "string"
+    headers: "array"
+    rows: "array"
+    sheets: "object"
+    template_path: "string"
+    output_path: "string"
+    data: "object"
+  risk_level: low
+
+# ── Calendar (grouped) ──
+- token: "ACT:CALENDAR"
+  patterns: ["\\bschedule\\b", "\\bcalendar\\b", "\\bcreate event\\b", "\\badd event\\b", "\\bmy schedule\\b", "\\bplan my day\\b", "\\bupdate event\\b", "\\bcancel event\\b", "\\bdelete event\\b", "\\bupcoming\\b", "\\bremind me\\b"]
+  target: system
+  description: "Calendar management. action: create {title,date,start_time} | list {days?} | update {event_id,fields} | delete {event_id} | plan {date?}"
+  params_schema:
+    action: "string"
+    title: "string"
+    date: "string"
+    start_time: "string"
+    end_time: "string"
+    description: "string"
+    event_id: "string"
+    fields: "object"
+    days: "number"
+  risk_level: low
+
+# ── Dynamic Tool Creation ──
+- token: "ACT:CREATE_TOOL"
+  patterns: ["\\bcreate tool\\b", "\\bmake tool\\b", "\\bnew tool\\b", "\\bbuild tool\\b"]
+  target: system
+  description: "Create a new tool at runtime. params: {name, description, code, parameters?}. Code must define a class extending BaseDynamicTool."
+  params_schema:
+    name: "string"
+    description: "string"
+    code: "string"
+    parameters: "object"
   risk_level: medium
+
+- token: "ACT:DELETE_DYNAMIC_TOOL"
+  patterns: ["\\bdelete tool\\b", "\\bremove tool\\b"]
+  target: system
+  description: "Delete a dynamically created tool. params: {name}"
+  params_schema:
+    name: "string"
+  risk_level: medium
+
+# ── Browse.sh (Browser Automation) ──
+- token: "ACT:BROWSE_OPEN"
+  patterns: ["\\bopen url\\b", "\\bgo to\\b", "\\bnavigate to\\b", "\\bbrowse to\\b", "\\bopen website\\b", "\\bopen page\\b"]
+  target: browse
+  description: "Open a URL in browser. auto_connect=true uses your existing Chrome (keeps login). params: {url, session?, headless?, timeout?, auto_connect?, cdp?}"
+  params_schema:
+    url: "string"
+    session: "string"
+    headless: "boolean"
+    timeout: "number"
+    auto_connect: "boolean"
+    cdp: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_SNAPSHOT"
+  patterns: ["\\bpage snapshot\\b", "\\bpage structure\\b", "\\bget elements\\b", "\\bpage refs\\b", "\\bbrowse snapshot\\b"]
+  target: browse
+  description: "Get accessibility snapshot of active page (cached refs for click/fill). params: {session?, filter?, max_depth?}"
+  params_schema:
+    session: "string"
+    filter: "string"
+    max_depth: "number"
+  risk_level: low
+
+- token: "ACT:BROWSE_CLICK"
+  patterns: ["\\bbrowse click\\b", "\\bclick element\\b", "\\bclick on\\b"]
+  target: browse
+  description: "Click an element by snapshot ref (@0-12), XPath, or CSS selector. params: {selector, session?}"
+  params_schema:
+    selector: "string"
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_FILL"
+  patterns: ["\\bbrowse fill\\b", "\\bfill input\\b", "\\btype in\\b", "\\benter text in\\b"]
+  target: browse
+  description: "Fill an input element by snapshot ref, XPath, or selector. params: {selector, value, session?, press_enter?}"
+  params_schema:
+    selector: "string"
+    value: "string"
+    session: "string"
+    press_enter: "boolean"
+  risk_level: low
+
+- token: "ACT:BROWSE_GET"
+  patterns: ["\\bget page text\\b", "\\bget page html\\b", "\\bget page markdown\\b", "\\bget page title\\b", "\\bpage content\\b"]
+  target: browse
+  description: "Read page data. what: url|title|text|html|markdown|value. params: {what, selector?, session?}"
+  params_schema:
+    what: "string"
+    selector: "string"
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_SCREENSHOT"
+  patterns: ["\\bscreenshot\\b", "\\bcapture page\\b", "\\btake screenshot\\b"]
+  target: browse
+  description: "Take a screenshot of the active browser page. params: {session?}"
+  params_schema:
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_SKILLS"
+  patterns: ["\\bbrowse skills\\b", "\\bfind skill\\b", "\\bwebsite skills\\b", "\\bsite playbook\\b"]
+  target: browse
+  description: "Search browse.sh catalog for pre-built browser automation playbooks. params: {query?, limit?}"
+  params_schema:
+    query: "string"
+    limit: "number"
+  risk_level: low
+
+- token: "ACT:BROWSE_EVAL"
+  patterns: ["\\bbrowse eval\\b", "\\brun js\\b", "\\bexecute javascript\\b", "\\beval js\\b"]
+  target: browse
+  description: "Evaluate JavaScript in the active browser page. params: {expression, session?}"
+  params_schema:
+    expression: "string"
+    session: "string"
+  risk_level: medium
+
+- token: "ACT:BROWSE_WAIT"
+  patterns: ["\\bbrowse wait\\b", "\\bwait for page\\b", "\\bwait for element\\b"]
+  target: browse
+  description: "Wait for load state, selector, or timeout. params: {selector_or_state, session?, timeout?}"
+  params_schema:
+    selector_or_state: "string"
+    session: "string"
+    timeout: "number"
+  risk_level: low
+
+# ── Skills ────────────────────────────────────────────
+- token: "ACT:LOAD_SKILL"
+  patterns: ["\\bload skill\\b", "\\bshow skill\\b", "\\bread skill\\b"]
+  target: skill
+  description: "Load a skill's full content by name. Use when you need to read the full instructions for a skill listed in your available skills. params: {name}"
+  params_schema:
+    name: "string"
+  risk_level: low
+
+# ── Goals ─────────────────────────────────────────────
+- token: "ACT:GOALS"
+  patterns: ["\\bgoal\\b", "\\bgoals\\b", "\\btrack goal\\b", "\\bset goal\\b", "\\bmilestone\\b", "\\bprogress\\b"]
+  target: goals
+  description: "Track goals and milestones. Actions: create, list, update, complete, add_milestone, update_milestone, delete. params: {action, title?, goal_id?, milestone_id?, status?, deadline?, description?, milestones?, fields?}"
+  params_schema:
+    action: "string"
+    title: "string"
+    goal_id: "string"
+    milestone_id: "string"
+    status: "string"
+    deadline: "string"
+    description: "string"
+    milestones: "array"
+    fields: "object"
+  risk_level: low
+
+# ── Reminders ────────────────────────────────────────
+- token: "ACT:REMINDERS"
+  patterns: ["\\bremind\\b", "\\breminder\\b", "\\bschedule\\b", "\\bscheduler\\b", "\\brecurring\\b", "\\balarm\\b"]
+  target: reminders
+  description: "Set reminders and recurring schedules. Actions: create, recurring, list, dismiss, delete. params: {action, title?, datetime?, time?, recurrence?, description?, reminder_id?, show_all?}"
+  params_schema:
+    action: "string"
+    title: "string"
+    datetime: "string"
+    time: "string"
+    recurrence: "string"
+    description: "string"
+    reminder_id: "string"
+    show_all: "boolean"
+  risk_level: low

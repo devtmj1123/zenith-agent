@@ -1,7 +1,14 @@
 from __future__ import annotations
+import json
 import os
 from pathlib import Path
 from typing import Optional
+
+# Global data directory — always in user's home, not CWD
+ZENITH_HOME = Path.home() / ".zenith"
+ZENITH_HOME.mkdir(parents=True, exist_ok=True)
+
+_PREFS_PATH = ZENITH_HOME / "preferences.json"
 
 # Auto-load .env file if it exists
 _env_file = Path(__file__).resolve().parent.parent / ".env"
@@ -34,6 +41,16 @@ PROVIDERS = {
         "base_url": "http://localhost:11434/v1",
         "model": "llama3.2:3b",
         "env_key": None,
+    },
+    "mimo": {
+        "base_url": "https://api.xiaomimimo.com/v1",
+        "model": "MiMo-v2.5",
+        "env_key": "MIMO_API_KEY",
+    },
+    "cerebras": {
+        "base_url": "https://api.cerebras.ai/v1",
+        "model": "llama3.1-8b",
+        "env_key": "CEREBRAS_API_KEY",
     },
 }
 
@@ -87,6 +104,17 @@ class Settings:
         self.debug = False
         self.tts_enabled = False
         self.tts_engine = "edge"
+        self.tts_voice = ""  # "male", "female", or empty for default
+        self.user_name = ""  # Set via /name or auto-detected
+        self.wake_words = ["zenith", "hey zenith", "ok zenith", "hi zenith"]
+
+        # Feature toggles (expensive features)
+        self.dream_enabled = False  # Idle-time memory consolidation
+        self.speculative_enabled = True  # Action prediction pre-warming
+        self.dual_channel_enabled = False  # TTS while executing tools
+        self.briefing_enabled = True  # Morning brief at session start
+        self.proactive_enabled = False  # Agent initiates conversation
+        self.selfeval_enabled = True  # Self-evaluation scoring per message
 
         # Backward compat aliases (used by agent_loop, main.py old code)
         self.provider = ""
@@ -130,6 +158,15 @@ class Settings:
         )
 
         self.debug = os.getenv("ZENITH_DEBUG", "").lower() in ("1", "true", "yes")
+        self.max_iterations = int(os.getenv("ZENITH_MAX_ITERATIONS", str(self.max_iterations)))
+
+        # Feature toggles (expensive features)
+        self.dream_enabled = os.getenv("ZENITH_DREAM", "").lower() in ("1", "true", "yes")
+        self.speculative_enabled = os.getenv("ZENITH_SPECULATIVE", "1").lower() in ("1", "true", "yes")
+        self.dual_channel_enabled = os.getenv("ZENITH_DUAL_CHANNEL", "").lower() in ("1", "true", "yes")
+        self.briefing_enabled = os.getenv("ZENITH_BRIEFING", "1").lower() in ("1", "true", "yes")
+        self.proactive_enabled = os.getenv("ZENITH_PROACTIVE", "").lower() in ("1", "true", "yes")
+        self.selfeval_enabled = os.getenv("ZENITH_SELFEVAL", "1").lower() in ("1", "true", "yes")
 
         # Backward compat aliases
         self._sync_aliases()
@@ -161,3 +198,33 @@ class Settings:
 
     def is_configured(self) -> bool:
         return self.reasoning.is_configured()
+
+    def save_preferences(self):
+        """Persist user preferences to disk (survives restarts)."""
+        prefs = {
+            "tts_enabled": self.tts_enabled,
+            "tts_engine": self.tts_engine,
+            "tts_voice": self.tts_voice,
+            "dual_channel_enabled": self.dual_channel_enabled,
+            "briefing_enabled": self.briefing_enabled,
+            "proactive_enabled": self.proactive_enabled,
+            "selfeval_enabled": self.selfeval_enabled,
+            "dream_enabled": self.dream_enabled,
+            "speculative_enabled": self.speculative_enabled,
+            "user_name": self.user_name,
+            "wake_words": self.wake_words,
+        }
+        _PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _PREFS_PATH.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+
+    def load_preferences(self):
+        """Load persisted preferences (called after load_from_env)."""
+        if not _PREFS_PATH.exists():
+            return
+        try:
+            prefs = json.loads(_PREFS_PATH.read_text(encoding="utf-8"))
+            for key, val in prefs.items():
+                if hasattr(self, key):
+                    setattr(self, key, val)
+        except Exception:
+            pass
