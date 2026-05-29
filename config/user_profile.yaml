@@ -1,0 +1,11 @@
+# Zenith User Profile
+# Edit this file to personalize your agent.
+# All fields are optional — leave blank for defaults.
+
+name: ""
+role: ""
+communication_style: "concise, direct"
+preferences:
+  - "Match my language — if I write in English, reply in English"
+  - "Shortest clear answer wins"
+current_projects: []
