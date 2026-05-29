@@ -28,7 +28,11 @@ class CodebookCompiler:
     # ── public API ───────────────────────────────────────
 
     def compile(self, raw_intent: str) -> Optional[CompiledAction]:
-        """Parse natural language intent into a CompiledAction."""
+        """Parse short natural-language intent into a CompiledAction.
+
+        Designed for SHORT intent strings (2-10 words), not full LLM responses.
+        For LLM responses, use regex-based ACT:TOKEN extraction instead.
+        """
         intent_lower = raw_intent.lower().strip()
         best: Optional[CompiledAction] = None
         best_conf = 0.0
@@ -57,9 +61,73 @@ class CodebookCompiler:
                 "target": a.get("target", "system"),
                 "risk_level": a.get("risk_level", "low"),
                 "params_schema": a.get("params_schema", {}),
+                "patterns": a.get("patterns", []),
             }
             for a in self._actions
         ]
+
+    def get_tools_schema(self) -> list[dict]:
+        """Generate OpenAI-compatible tools schema from codebook.
+
+        Each action becomes a function definition that the LLM can call natively.
+        No regex parsing needed — the model returns structured JSON tool_calls.
+
+        Grouped tools (have 'action' param): only 'action' is required.
+        Simple tools: all params are required.
+
+        Every tool includes an 'intent' parameter for display/summarization.
+        """
+        tools = []
+        for action in self._actions:
+            token = action["token"]
+            func_name = token.replace("ACT:", "").lower()
+
+            params_schema = action.get("params_schema", {})
+            properties = {}
+            required = []
+            is_grouped = "action" in params_schema
+
+            for param_name, param_type in params_schema.items():
+                if param_type in ("string", "number", "array", "object", "boolean"):
+                    prop = {"type": param_type}
+                else:
+                    prop = {"type": "string", "description": param_type}
+                properties[param_name] = prop
+                # Grouped tools: only action is required
+                if is_grouped:
+                    if param_name == "action":
+                        required.append(param_name)
+                else:
+                    required.append(param_name)
+
+            # Add intent field for display/summarization
+            properties["intent"] = {
+                "type": "string",
+                "description": "Brief description of what you're doing (for display)"
+            }
+
+            tool = {
+                "type": "function",
+                "function": {
+                    "name": func_name,
+                    "description": action.get("description", ""),
+                    "parameters": {
+                        "type": "object",
+                        "properties": properties,
+                        "required": required,
+                    },
+                },
+            }
+            tools.append(tool)
+        return tools
+
+    def get_risk_levels(self) -> dict[str, str]:
+        """Return mapping of function name -> risk level."""
+        risks = {}
+        for action in self._actions:
+            func_name = action["token"].replace("ACT:", "").lower()
+            risks[func_name] = action.get("risk_level", "low")
+        return risks
 
     # ── internals ────────────────────────────────────────
 

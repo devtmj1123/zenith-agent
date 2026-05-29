@@ -43,10 +43,12 @@ class ExecutionState:
     goal: str
     messages: List[Dict[str, Any]]
     iteration: int = 0
-    max_iterations: int = 30
+    max_iterations: int = 30  # Overridden by settings.max_iterations in agent_loop
     tool_calls_made: int = 0
     tokens_used: int = 0
-    token_budget: int = 50_000
+    input_tokens: int = 0
+    output_tokens: int = 0
+    token_budget: int = 200_000
     compressed_context: str = ""
     final_response: str = ""
     goal_achieved: bool = False

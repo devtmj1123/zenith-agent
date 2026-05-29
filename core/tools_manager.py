@@ -39,6 +39,14 @@ class ToolsManager:
                 result = await fn(params)
             else:
                 result = fn(params)
+            # Tools return dicts with {success, data, error} — respect their verdict
+            if isinstance(result, dict) and "success" in result:
+                return ToolResult(
+                    success=result["success"],
+                    tool_name=name,
+                    data=result.get("data"),
+                    error=result.get("error"),
+                )
             return ToolResult(success=True, tool_name=name, data=result)
         except Exception as e:
             return ToolResult(success=False, tool_name=name, error=str(e))
