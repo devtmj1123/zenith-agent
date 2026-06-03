@@ -19,6 +19,118 @@ from .pc_control import (
 )
 from .subagent import dispatch_agent, dispatch_parallel
 
+# Science Research Engine
+_science_engine = None
+
+def set_science_engine(engine):
+    global _science_engine
+    _science_engine = engine
+
+async def science_research(params: dict) -> dict:
+    """Science research with Socratic rebuttal and domain-specific analysis.
+    params: {query: str, depth?: str (normal|deep)}
+    Domains: new_energy (battery/fusion), pharma (drug development), cross_domain
+    """
+    if not _science_engine:
+        return {"success": False, "error": "Science engine not initialized"}
+    query = params.get("query", "").strip()
+    if not query:
+        return {"success": False, "error": "Missing 'query' parameter"}
+    depth = params.get("depth", "normal")
+    try:
+        result = await _science_engine.research(query, depth)
+        return {
+            "success": True,
+            "data": {
+                "query": result.query,
+                "domain": result.domain,
+                "findings": result.findings,
+                "sources": result.sources,
+                "confidence": result.confidence,
+                "rebuttal": result.rebuttal,
+                "hypothesis": result.hypothesis,
+            }
+        }
+    except Exception as e:
+        return {"success": False, "error": f"Research failed: {str(e)}"}
+
+async def analyze_molecule(params: dict) -> dict:
+    """Analyze molecule drug-likeness using RDKit.
+    params: {smiles: str}
+    Returns: MW, LogP, HBD, HBA, TPSA, Lipinski Ro5, alerts
+    """
+    if not _science_engine:
+        return {"success": False, "error": "Science engine not initialized"}
+    smiles = params.get("smiles", "").strip()
+    if not smiles:
+        return {"success": False, "error": "Missing 'smiles' parameter"}
+    try:
+        result = _science_engine.pharma.analyze_molecule(smiles)
+        return {
+            "success": True,
+            "data": {
+                "smiles": result.smiles,
+                "molecular_weight": result.molecular_weight,
+                "logp": result.logp,
+                "hbd": result.hbd,
+                "hba": result.hba,
+                "tpsa": result.tpsa,
+                "lipinski_passes": result.lipinski_passes,
+                "alerts": result.alerts,
+                "drug_likeness": result.drug_likeness,
+            }
+        }
+    except Exception as e:
+        return {"success": False, "error": f"Analysis failed: {str(e)}"}
+
+async def check_battery_claim(params: dict) -> dict:
+    """Validate battery energy density claim against theoretical limits.
+    params: {material: str, energy_density: float}
+    """
+    if not _science_engine:
+        return {"success": False, "error": "Science engine not initialized"}
+    material = params.get("material", "").strip()
+    energy_density = params.get("energy_density", 0)
+    if not material or not energy_density:
+        return {"success": False, "error": "Missing 'material' or 'energy_density'"}
+    try:
+        result = _science_engine.energy.analyze_battery_claim(material, energy_density)
+        return {"success": True, "data": result}
+    except Exception as e:
+        return {"success": False, "error": f"Analysis failed: {str(e)}"}
+
+async def check_fusion_lawson(params: dict) -> dict:
+    """Check if fusion conditions meet Lawson criterion.
+    params: {density_m3: float, confinement_s: float, temperature_kev: float}
+    """
+    if not _science_engine:
+        return {"success": False, "error": "Science engine not initialized"}
+    density = params.get("density_m3", 0)
+    confinement = params.get("confinement_s", 0)
+    temp = params.get("temperature_kev", 0)
+    if not all([density, confinement, temp]):
+        return {"success": False, "error": "Missing density, confinement, or temperature"}
+    try:
+        result = _science_engine.energy.check_fusion_lawson(density, confinement, temp)
+        return {"success": True, "data": result}
+    except Exception as e:
+        return {"success": False, "error": f"Analysis failed: {str(e)}"}
+
+async def compute_debye_length(params: dict) -> dict:
+    """Compute Debye length for electrolyte screening.
+    params: {temperature_k: float, concentration_mol_L: float, charge_number?: int}
+    """
+    if not _science_engine:
+        return {"success": False, "error": "Science engine not initialized"}
+    temp = params.get("temperature_k", 298)
+    conc = params.get("concentration_mol_L", 1.0)
+    charge = params.get("charge_number", 1)
+    try:
+        result = _science_engine.energy.compute_debye_length(temp, conc, charge)
+        return {"success": True, "data": {"debye_length_nm": result}}
+    except Exception as e:
+        return {"success": False, "error": f"Calculation failed: {str(e)}"}
+
 
 async def get_time(params: dict) -> dict:
     """Get current date and time."""
@@ -149,4 +261,10 @@ BUILTIN_TOOLS = {
     # Subagent — parallel task dispatch
     "dispatch_agent": dispatch_agent,
     "dispatch_parallel": dispatch_parallel,
+    # Science Research Engine
+    "science_research": science_research,
+    "analyze_molecule": analyze_molecule,
+    "check_battery_claim": check_battery_claim,
+    "check_fusion_lawson": check_fusion_lawson,
+    "compute_debye_length": compute_debye_length,
 }

@@ -21,6 +21,14 @@ class IntentTracker:
                 data = json.loads(TASK_DB_PATH.read_text())
                 for task_id, node_data in data.items():
                     self._tasks[task_id] = TaskNode(**node_data)
+                # Auto-cleanup: remove completed/abandoned tasks older than 24h
+                cutoff = time.time() - 86400
+                stale = [tid for tid, t in self._tasks.items()
+                         if t.status in ("completed", "abandoned") and t.updated_at < cutoff]
+                for tid in stale:
+                    del self._tasks[tid]
+                if stale:
+                    self._save()
             except Exception:
                 self._tasks = {}
 
@@ -98,10 +106,40 @@ class IntentTracker:
         pending = self.get_pending_tasks(max_age_days=3.0)
         if not pending:
             return None
+
+        # Auto-abandon stale tasks (no progress update for > 6 hours)
+        stale_cutoff = time.time() - 21600
+        active = []
+        for t in pending:
+            no_progress = not t.progress_summary or t.progress_summary == "(no progress recorded)"
+            if t.updated_at < stale_cutoff and no_progress:
+                t.status = "abandoned"
+            else:
+                active.append(t)
+        self._save()
+
+        if not active:
+            return None
+
+        most_recent = max(active, key=lambda t: t.updated_at)
+        progress = most_recent.progress_summary or ""
+        lines = [f'Last time: "{most_recent.goal}"']
+        if progress and progress not in ("resumed by user", "(no progress recorded)"):
+            lines.append(f'Progress: {progress}')
+        lines.append('Continue?')
+        return "\n".join(lines)
+
+    def mark_resumed(self, task_id: str):
+        """Mark task as resumed so it doesn't repeat in next briefing."""
+        if task_id in self._tasks:
+            self._tasks[task_id].updated_at = time.time()
+            self._tasks[task_id].progress_summary = ""
+            self._save()
+
+    def get_most_recent_pending_id(self) -> Optional[str]:
+        """Get the ID of the most recent pending task."""
+        pending = self.get_pending_tasks(max_age_days=3.0)
+        if not pending:
+            return None
         most_recent = max(pending, key=lambda t: t.updated_at)
-        progress = most_recent.progress_summary or "(no progress recorded)"
-        return (
-            f"你上次还有一个任务未完成：\"{most_recent.goal}\"\n"
-            f"进度：{progress}\n"
-            f"要继续吗？"
-        )
+        return most_recent.task_id

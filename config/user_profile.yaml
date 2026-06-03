@@ -6,6 +6,7 @@ name: ""
 role: ""
 communication_style: "concise, direct"
 preferences:
-  - "Match my language — if I write in English, reply in English"
+  - "Match the user's language — if they write in English, reply in English; if Chinese, reply in Chinese"
   - "Shortest clear answer wins"
+  - "Do, don't teach. Execute directly, don't list suggestions"
 current_projects: []

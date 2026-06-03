@@ -196,6 +196,34 @@ class PhysicalIntuition:
         if any(w in goal_lower for w in ["run", "execute", "command", "shell"]):
             constraints.append("Commands may require specific environment or permissions.")
 
+        # Physics/science operations — inject relevant constants and laws
+        physics_keywords = ["physics", "energy", "force", "mass", "velocity", "acceleration",
+                           "gravity", "electric", "magnetic", "quantum", "thermodynamic",
+                           "temperature", "pressure", "momentum", "wave", "frequency",
+                           "calculate", "compute", "simulate", "model"]
+        if any(w in goal_lower for w in physics_keywords):
+            try:
+                from memory.hard_memory import PHYSICS_CONSTANTS, PHYSICAL_LAWS
+                # Inject key constants
+                key_constants = ["c", "h", "G", "k_B", "e", "m_e", "m_p", "N_A", "R"]
+                constant_lines = []
+                for name in key_constants:
+                    if name in PHYSICS_CONSTANTS:
+                        c = PHYSICS_CONSTANTS[name]
+                        constant_lines.append(f"{name} = {c['value']} {c['unit']}")
+                if constant_lines:
+                    constraints.append("Key physics constants: " + "; ".join(constant_lines))
+
+                # Inject relevant laws
+                relevant_laws = []
+                for law_name, law in PHYSICAL_LAWS.items():
+                    if any(kw in goal_lower for kw in law["domain"].split("/")):
+                        relevant_laws.append(f"{law_name}: {law['statement']}")
+                if relevant_laws:
+                    constraints.append("Relevant laws: " + "; ".join(relevant_laws[:3]))
+            except ImportError:
+                pass
+
         if not constraints:
             return ""
 

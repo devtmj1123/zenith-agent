@@ -50,10 +50,17 @@ FAILURE_TREE: Dict[str, FailurePattern] = {
     ),
     "browser.connection_refused": FailurePattern(
         pattern_id="browser.connection_refused",
-        description="Browser not connected",
+        description="Browser not connected or fetch failed",
         recovery_chain=[
-            RecoveryStep("Open browser with local mode (most reliable)", "browse_open", None),
+            RecoveryStep("Stop stale session and open with local mode", "browse_open", None),
             RecoveryStep("Take screenshot to check state", "browse_screenshot", None),
+        ]
+    ),
+    "browser.already_running": FailurePattern(
+        pattern_id="browser.already_running",
+        description="Browser session already running in different mode",
+        recovery_chain=[
+            RecoveryStep("browse_open handles this automatically (stops and retries)", "browse_open", None),
         ]
     ),
     "browser.no_active_page": FailurePattern(
@@ -153,7 +160,8 @@ class FailureLibrary:
         ("Element.*not found|element_id.*invalid", "browser.element_not_found"),
         ("type.*fail|nativeInputValueSetter", "browser.type_fails"),
         ("CDP.*not available|remote-debugging", "browser.cdp_unavailable"),
-        ("Could not establish connection|content script", "browser.connection_refused"),
+        ("Could not establish connection|content script|fetch failed", "browser.connection_refused"),
+        ("already running.*mode|session.*already", "browser.already_running"),
         ("No active page|no active session", "browser.no_active_page"),
         ("UIA.*timeout|automation timeout", "desktop.uia_timeout"),
         ("403.*Forbidden|Cloudflare|bot detected", "network.403_forbidden"),

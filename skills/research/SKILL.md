@@ -3,54 +3,65 @@ name: research
 description: Use when finding information, learning about topics, comparing options, gathering data, or answering questions that need web sources
 ---
 
-# Research
+# Research — MANDATORY WORKFLOW
+
+**You MUST follow this workflow for ANY research task. NO EXCEPTIONS.**
 
 ## Tools
 
 `search` — web search (DuckDuckGo, returns snippets)
-`scrape` — full article extraction (Firecrawl → markdown, falls back to fetch)
+`scrape` — full article extraction (markdown)
 `fetch` — raw URL content extraction (HTML → text)
 `recall` — check existing knowledge before searching
 
-## Methodology
+## MANDATORY STEPS
 
-### Phase 1: Scope
-- Clarify the research question. One sentence, specific.
-- Check `recall` for existing knowledge on this topic.
-- Identify what type of answer is needed: factual, comparative, analytical, or exploratory.
+### Step 1: Search (REQUIRED)
+- Call `search` with 2-3 DIFFERENT query formulations
+- NEVER skip this step
+- NEVER write from LLM knowledge alone
+- Example: `search({query: "quantum computing applications 2024"})`
 
-### Phase 2: Broad Survey
-- `search` with 2-3 different query formulations.
-- Scan snippets to identify the most relevant sources.
-- Note which sources warrant deep reading.
+### Step 2: Extract (REQUIRED)
+- Call `scrape` on top 2-3 most relevant URLs from search results
+- If scrape fails, call `fetch` as fallback
+- Get FULL article content, not just snippets
+- Example: `scrape({url: "https://example.com/article"})`
 
-### Phase 3: Deep Extraction
-- `scrape` the top 2-3 sources for full content.
-- If scrape fails, `fetch` as fallback.
-- Extract specific data points, not just summaries.
-- Record exact quotes with source URLs for claims.
+### Step 3: Synthesize (REQUIRED)
+- Cross-reference claims across at least 2 sources
+- Separate established facts from opinions
+- Present findings with source URLs
 
-### Phase 4: Synthesis
-- Cross-reference claims across at least 2 sources.
-- Separate established facts from opinions and speculation.
-- Identify contradictions and note which source is more authoritative.
-- Present findings structured by subtopic, not by source.
-
-### Phase 5: Gaps and Follow-up
-- Note what remains unclear or unverified.
-- Suggest follow-up searches if needed.
-- If data is insufficient, say so explicitly.
+### Step 4: Cite (REQUIRED)
+- Include URL for EVERY claim
+- If no source found, say "No reliable source found"
+- NEVER make up citations
 
 ## Output Format
 
-- Lead with the direct answer to the research question.
-- Support with evidence and source URLs.
-- End with confidence level and open questions.
-- Never present a single source as definitive for important claims.
+- Lead with direct answer
+- Support with evidence and source URLs
+- End with confidence level
+- Note gaps and open questions
 
-## Edge Cases
+## RED FLAGS — STOP if you catch yourself:
 
-- For recent events (last 24h), search with date filters.
-- For academic topics, prefer `.edu`, `.org`, peer-reviewed sources.
-- For controversial topics, present multiple perspectives with sources.
-- For technical topics, look for official documentation first.
+- "Studies show..." without actual search results
+- "According to research..." without citing URLs
+- Writing from memory without searching first
+- Making up statistics or data
+- Claiming sources exist without verifying
+
+**ALL OF THESE MEAN: Go back to Step 1 and SEARCH.**
+
+## Example Workflow
+
+User: "Write about quantum computing applications"
+
+1. `search({query: "quantum computing applications 2024"})`
+2. `search({query: "quantum computing real world use cases"})`
+3. `scrape({url: "https://example.com/quantum-apps"})`
+4. `scrape({url: "https://another-source.com/quantum"})`
+5. Synthesize findings with citations
+6. Present with source URLs

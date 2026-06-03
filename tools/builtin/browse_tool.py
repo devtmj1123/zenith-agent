@@ -60,13 +60,9 @@ async def browse_open(params: dict) -> dict:
     timeout = params.get("timeout", 30)
     session = params.get("session")
 
-    # Strategy: try --local first (most reliable), fall back to --auto-connect
-    # --local launches its own browser instance (no remote debugging needed)
-    # --auto-connect tries to find existing Chrome with remote debugging
     modes_to_try = []
 
     if params.get("cdp"):
-        # Explicit CDP URL/port provided
         args = ["open", url, "--cdp", params["cdp"]]
         if session:
             args.extend(["--session", session])
@@ -79,14 +75,14 @@ async def browse_open(params: dict) -> dict:
         args.extend(["--timeout", str(timeout * 1000)])
         modes_to_try.append(args)
     else:
-        # Try --local first (launches own browser, most reliable)
-        args_local = ["open", url, "--local"]
+        # Try --local --headed first (reuses existing session, visible browser)
+        args_local = ["open", url, "--local", "--headed"]
         if session:
             args_local.extend(["--session", session])
         args_local.extend(["--timeout", str(timeout * 1000)])
         modes_to_try.append(args_local)
 
-        # Fallback: --auto-connect (needs Chrome with --remote-debugging-port)
+        # Fallback: --auto-connect (user's Chrome with remote debugging)
         args_auto = ["open", url, "--auto-connect"]
         if session:
             args_auto.extend(["--session", session])
@@ -98,12 +94,8 @@ async def browse_open(params: dict) -> dict:
         result = await _run_browse(*args, timeout=timeout + 5)
         if result["success"]:
             break
-        # If session conflict, stop and retry
-        if "already running" in str(result.get("error", "")):
-            await _run_browse("stop", "--session", session or "default", timeout=10)
-            result = await _run_browse(*args, timeout=timeout + 5)
-            if result["success"]:
-                break
+        # Stop session between attempts (browse CLI leaves stale state on failure)
+        await _run_browse("stop", "--session", session or "default", timeout=5)
 
     if result and result["success"]:
         # Auto-snapshot after open for immediate element access

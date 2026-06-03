@@ -95,13 +95,18 @@ def build_agent(settings: Settings, on_event=None) -> AgentLoop:
         tools_manager.register(name, fn)
 
     soft_memory = SoftMemory()
+    from tools.builtin.memory_tools import set_soft_memory
+    set_soft_memory(soft_memory)
     codebook = CodebookCompiler()
 
     token_stats = {"prompt": 0, "completion": 0, "total": 0, "model": ""}
 
     async def _reasoning_call(messages, compressed_context="", tools=None):
+        if compressed_context:
+            # Inject compressed context as a system message
+            messages = [{"role": "system", "content": f"Previous context summary: {compressed_context}"}] + list(messages)
         result = await llm_call_for_role(
-            settings.reasoning, messages, tools=tools
+            settings.reasoning, messages, tools=tools, max_tokens=8192
         )
         token_stats["prompt"] += result.get("prompt_tokens", 0)
         token_stats["completion"] += result.get("completion_tokens", 0)
@@ -122,6 +127,15 @@ def build_agent(settings: Settings, on_event=None) -> AgentLoop:
         compress_llm_call=_compression_call,
     )
 
+    # Initialize Science Research Engine
+    from research.science_engine import ScienceEngine
+    from tools.builtin import set_science_engine
+    science_engine = ScienceEngine(
+        llm_client=None,  # Will use agent's LLM if needed
+        hard_memory=None,  # Will import from memory.hard_memory
+    )
+    set_science_engine(science_engine)
+
     agent = AgentLoop(
         llm_call=_reasoning_call,
         tools_manager=tools_manager,
@@ -131,6 +145,10 @@ def build_agent(settings: Settings, on_event=None) -> AgentLoop:
         on_event=on_event,
     )
     agent._token_stats = token_stats
+
+    # Wire fast-path LLM into dream controller for quick concept matching
+    agent.dream_controller.fast_llm_call = _fast_path_call
+
     return agent
 
 

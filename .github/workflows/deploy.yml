@@ -1,0 +1,207 @@
+name: Deploy to ECS
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: my-app
+  ECS_SERVICE: my-app-service
+  ECS_CLUSTER: my-app-cluster
+  ECS_TASK_DEFINITION: ./ecs/task-definition.json
+  CONTAINER_NAME: my-app
+
+permissions:
+  id-token: write   # For OIDC / assume-role
+  contents: read
+
+jobs:
+  # ─── 1. TEST ────────────────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test -- --ci --coverage
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+
+  # ─── 2. BUILD & PUSH DOCKER IMAGE ───────────────────────────────────
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+      image-uri: ${{ steps.meta.outputs.uri }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Docker meta
+        id: meta
+        run: |
+          VERSION="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${GITHUB_SHA::8}"
+          echo "uri=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.uri }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── 3. DEPLOY TO ECS ───────────────────────────────────────────────
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production
+    outputs:
+      task-definition-arn: ${{ steps.deploy.outputs.task-definition-arn }}
+      previous-task-definition-arn: ${{ steps.deploy.outputs.previous-task-definition-arn }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Render task definition
+        id: render
+        run: |
+          # Replace image URI in the task definition template
+          TASK_DEF=$(cat ${{ env.ECS_TASK_DEFINITION }} | \
+            jq --arg IMAGE "${{ needs.build-and-push.outputs.image-uri }}" \
+               '.containerDefinitions[0].image = $IMAGE')
+          echo "$TASK_DEF" > rendered-task-definition.json
+          echo "task-file=rendered-task-definition.json" >> "$GITHUB_OUTPUT"
+
+      - name: Get current task definition (for rollback)
+        id: current
+        run: |
+          CURRENT=$(aws ecs describe-services \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }} \
+            --query 'services[0].taskDefinition' \
+            --output text)
+          echo "arn=$CURRENT" >> "$GITHUB_OUTPUT"
+
+      - name: Register new task definition
+        id: register
+        run: |
+          NEW_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://${{ steps.render.outputs.task-file }} \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          echo "arn=$NEW_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to ECS service
+        id: deploy
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --task-definition ${{ steps.register.outputs.arn }} \
+            --force-new-deployment \
+            --query 'service.taskDefinition' \
+            --output text
+
+          echo "task-definition-arn=${{ steps.register.outputs.arn }}" >> "$GITHUB_OUTPUT"
+          echo "previous-task-definition-arn=${{ steps.current.outputs.arn }}" >> "$GITHUB_OUTPUT"
+
+          # Wait for service to stabilise
+          echo "⏳ Waiting for service to stabilize (max 10 min)..."
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }}
+          echo "✅ Deployment stable"
+
+  # ─── 4. ROLLBACK ON FAILURE ─────────────────────────────────────────
+  rollback:
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: failure()
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Rollback to previous task definition
+        run: |
+          echo "🚨 Deployment failed — rolling back..."
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --task-definition ${{ needs.deploy.outputs.previous-task-definition-arn }} \
+            --force-new-deployment
+
+          echo "⏳ Waiting for rollback to stabilize..."
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }}
+          echo "✅ Rollback complete — service restored to previous version"
+
+      - name: Notify rollback (Slack)
+        if: always()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "🚨 *ECS Rollback Executed*\nWorkflow: ${{ github.workflow }}\nCommit: ${{ github.sha }}\nRolled back to: `${{ needs.deploy.outputs.previous-task-definition-arn }}`"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ─── 5. NOTIFY SUCCESS ──────────────────────────────────────────────
+  notify:
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: success()
+    steps:
+      - name: Notify success (Slack)
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "✅ *ECS Deploy Succeeded*\nWorkflow: ${{ github.workflow }}\nCommit: `${{ needs.build-and-push.outputs.image-tag }}`\nService: `${{ env.ECS_SERVICE }}`"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

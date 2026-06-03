@@ -1,16 +1,68 @@
-default:
-  autopilot: false
-  confirm_irreversible: true
-  max_file_size_mb: 100
-  allowed_shell_commands:
-    - "ls"
-    - "cat"
-    - "echo"
-    - "python"
-    - "pip"
-    - "git"
-  blocked_shell_commands:
-    - "rm -rf /"
-    - "format"
-    - "shutdown"
-    - "reboot"
+# config/permissions.yaml
+# Permission rules for the PermissionGate
+
+# Tools that always execute immediately (safe, read-only)
+always_allow:
+  - web_search
+  - calculator
+  - datetime_tool
+  - memory_tool
+  - system_info
+  - vision
+  - recall
+  - store_memory
+  - read_file
+  - list_dir
+  - glob_search
+  - grep_search
+
+# Tools that require human confirm (unless autopilot=true)
+high_risk_tools:
+  - shell
+  - run_command
+  - code_exec
+  - browser
+  - app_control
+  - pc_control
+  - write_file
+  - edit_file
+  - delete_file
+
+# Hard blocked patterns — no exceptions, no autopilot override
+hard_block_patterns:
+  - "rm\\s+-rf\\s+/"
+  - "rm\\s+-rf\\s+~"
+  - "format\\s+c:"
+  - "mkfs"
+  - "dd\\s+if=.*of=/dev/(sd|hd|nvme)"
+  - ":(\\(\\)\\{:|:&\\};:)"
+  - "DROP\\s+DATABASE"
+  - "shutdown\\s+/[srh]"
+  - "taskkill.*system"
+  - "net\\s+user.*\\s+/add"
+
+# Blocked network domains
+blocked_domains:
+  - "malware"
+  - "ransomware"
+  - "phishing"
+
+# Paths the agent can NEVER write to
+protected_paths:
+  - "C:/Windows"
+  - "C:/Program Files"
+  - "/etc"
+  - "/bin"
+  - "/usr/bin"
+  - "/sys"
+  - "/proc"
+  - ".zenith/core"
+
+# Paths requiring extra caution (shadow + confirm)
+sensitive_paths:
+  - "AppData/Roaming"
+  - ".ssh"
+  - ".aws"
+  - ".gnupg"
+  - ".config/google-chrome"
+  - "Keychain"

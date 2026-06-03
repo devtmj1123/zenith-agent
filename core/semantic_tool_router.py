@@ -1,8 +1,7 @@
-"""Tool router — passes all tools to the LLM.
+"""Tool router — selects relevant tools per query to save tokens.
 
-With ~20 tools, no need for semantic selection.
-The LLM decides which tools to use based on descriptions.
-Keeps record_usage for debugging/observability.
+Filters tools by keyword matching + recency boost.
+Sends ~10-15 tools instead of all 43.
 """
 from __future__ import annotations
 import logging
@@ -10,6 +9,57 @@ import time
 from typing import Dict, List
 
 log = logging.getLogger(__name__)
+
+# Tool → keyword groups for matching
+TOOL_KEYWORDS = {
+    "web_search": ["search", "find", "google", "look up", "query", "what is", "who is"],
+    "fetch": ["fetch", "download", "get url", "retrieve"],
+    "scrape": ["scrape", "extract", "parse html", "web page"],
+    "browse_open": ["open", "browser", "website", "navigate", "url", "youtube", "chrome"],
+    "browse_snapshot": ["snapshot", "page", "elements", "refs", "page structure"],
+    "browse_click": ["click", "button", "link", "press"],
+    "browse_fill": ["fill", "type", "input", "search box", "form", "enter"],
+    "browse_screenshot": ["screenshot", "screen", "capture", "image"],
+    "browse_eval": ["javascript", "eval", "js", "script"],
+    "browse_wait": ["wait", "loading", "delay"],
+    "browse_get": ["get text", "get url", "page title", "page content"],
+    "read_file": ["read", "file", "show", "view", "cat", "open file"],
+    "write_file": ["write", "create file", "save", "new file"],
+    "edit_file": ["edit", "modify", "change", "update file", "fix"],
+    "list_dir": ["list", "directory", "ls", "dir", "folder", "files"],
+    "glob_search": ["find files", "glob", "search files", "pattern"],
+    "grep_search": ["grep", "search content", "find in files"],
+    "run_command": ["run", "command", "shell", "terminal", "execute", "npm", "pip", "git", "python"],
+    "recall": ["remember", "recall", "memory", "past", "previous", "before"],
+    "store_memory": ["store", "save memory", "remember this", "note"],
+    "pc_click": ["desktop click", "ui click", "app click"],
+    "pc_fill": ["desktop type", "ui type", "app type"],
+    "pc_get_ui_tree": ["ui tree", "accessibility", "desktop elements"],
+    "pc_screenshot": ["desktop screenshot", "screen capture"],
+    "dispatch_agent": ["agent", "delegate", "subagent", "parallel"],
+    "dispatch_parallel": ["parallel tasks", "run simultaneously"],
+    "get_time": ["time", "date", "today", "now"],
+    "get_weather": ["weather", "temperature", "forecast"],
+    "calendar": ["calendar", "schedule", "event", "meeting"],
+    "goals": ["goal", "objective", "target"],
+    "reminders": ["remind", "reminder", "alarm"],
+    "spreadsheet": ["spreadsheet", "excel", "csv", "sheet"],
+    "parse_document": ["document", "pdf", "docx", "parse doc"],
+    "load_skill": ["skill", "technique", "how to"],
+    "create_tool": ["create tool", "new tool", "dynamic tool"],
+    # Science Research Engine
+    "science_research": ["research", "science", "study", "investigate", "hypothesis",
+                         "battery", "fusion", "drug", "molecule", "physics",
+                         "新能源", "电池", "聚变", "药物", "分子", "科研"],
+    "analyze_molecule": ["molecule", "smiles", "drug likeness", "lipinski", "admet",
+                         "分子", "药物相似性"],
+    "check_battery_claim": ["battery claim", "energy density", "wh/kg", "能量密度"],
+    "check_fusion_lawson": ["fusion", "lawson", "ignition", "plasma", "聚变", "点火"],
+    "compute_debye_length": ["debye", "electrolyte", "screening", "德拜", "电解质"],
+}
+
+# Always-included tools (safe, common)
+ALWAYS_INCLUDE = {"recall", "store_memory", "get_time"}
 
 
 class SemanticToolRouter:
@@ -19,20 +69,60 @@ class SemanticToolRouter:
         self._usage_history: Dict[str, float] = {}
 
     def set_encoder(self, encoder):
-        """No-op — kept for backward compatibility."""
         pass
 
     def build_index(self, tools_schema: list[dict]):
-        """Store tool schemas for reference."""
         self._tool_schemas = tools_schema
         self._tool_names = [t.get("function", {}).get("name", "") for t in tools_schema]
 
-    def select(self, user_message: str, top_k: int = 8) -> list[dict]:
-        """Return ALL tools — let the LLM decide which to use."""
-        return self._tool_schemas
+    def select(self, user_message: str, top_k: int = 12) -> list[dict]:
+        """Select relevant tools based on keyword matching + recency."""
+        msg_lower = user_message.lower()
+        scored = []
+
+        for i, schema in enumerate(self._tool_schemas):
+            name = schema.get("function", {}).get("name", "")
+            desc = schema.get("function", {}).get("description", "").lower()
+            score = 0.0
+
+            # Keyword match
+            keywords = TOOL_KEYWORDS.get(name, [])
+            for kw in keywords:
+                if kw in msg_lower:
+                    score += 2.0
+
+            # Description match (partial)
+            for word in msg_lower.split():
+                if len(word) > 3 and word in desc:
+                    score += 0.5
+
+            # Recency boost
+            last_used = self._usage_history.get(name, 0)
+            if last_used > 0:
+                age = time.time() - last_used
+                if age < 300:  # Used in last 5 min
+                    score += 1.0
+
+            # Always-include bonus
+            if name in ALWAYS_INCLUDE:
+                score += 0.3
+
+            scored.append((score, i, schema))
+
+        # Sort by score, take top_k
+        scored.sort(key=lambda x: x[0], reverse=True)
+        selected = [s[2] for s in scored[:top_k]]
+
+        # Always include ALWAYS_INCLUDE tools
+        selected_names = {s.get("function", {}).get("name", "") for s in selected}
+        for schema in self._tool_schemas:
+            name = schema.get("function", {}).get("name", "")
+            if name in ALWAYS_INCLUDE and name not in selected_names:
+                selected.append(schema)
+
+        return selected
 
     def record_usage(self, tool_name: str):
-        """Record tool usage for observability."""
         self._usage_history[tool_name] = time.time()
 
     def set_context_hint(self, tool_name: str, boost: float = 1.0):

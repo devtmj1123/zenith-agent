@@ -95,7 +95,7 @@
 - token: "ACT:WEB_SEARCH"
   patterns: ["\\bsearch\\b", "\\bgoogle\\b", "\\bfind info\\b", "\\blook up\\b"]
   target: webmcp
-  description: "Search the web for information. params: {query, max_results?, allowed_domains?, blocked_domains?}"
+  description: "Search the web for information. Use this for ANY research task. NEVER write from memory alone. params: {query, max_results?, allowed_domains?, blocked_domains?}"
   params_schema:
     query: "string"
     max_results: "number"
@@ -218,7 +218,7 @@
 - token: "ACT:BROWSE_OPEN"
   patterns: ["\\bopen url\\b", "\\bgo to\\b", "\\bnavigate to\\b", "\\bbrowse to\\b", "\\bopen website\\b", "\\bopen page\\b"]
   target: browse
-  description: "Open a URL in browser. auto_connect=true uses your existing Chrome (keeps login). params: {url, session?, headless?, timeout?, auto_connect?, cdp?}"
+  description: "Open a URL in browser. Reuses existing session (cookies persist). params: {url, session?, headless?, timeout?, auto_connect?, cdp?}"
   params_schema:
     url: "string"
     session: "string"
@@ -344,4 +344,140 @@
     description: "string"
     reminder_id: "string"
     show_all: "boolean"
+  risk_level: low
+
+# ── Subagent ───────────────────────────────────────────
+- token: "ACT:DISPATCH_AGENT"
+  patterns: ["\\bdelegate\\b", "\\bsubagent\\b", "\\bdispatch\\b", "\\bspawn agent\\b"]
+  target: subagent
+  description: "Delegate a subtask to a fresh agent. params: {task, context?, model?}"
+  params_schema:
+    task: "string"
+    context: "string"
+    model: "string"
+  risk_level: low
+
+- token: "ACT:DISPATCH_PARALLEL"
+  patterns: ["\\bparallel\\b", "\\bsimultaneously\\b", "\\bat same time\\b", "\\bmulti-agent\\b"]
+  target: subagent
+  description: "Run multiple independent subtasks in parallel. params: {tasks: [{task, context?}]}"
+  params_schema:
+    tasks: "array"
+  risk_level: low
+
+# ── PC Control ─────────────────────────────────────────
+- token: "ACT:PC_GET_WINDOWS"
+  patterns: ["\\blist windows\\b", "\\bget windows\\b", "\\bshow windows\\b", "\\bdesktop windows\\b"]
+  target: pc
+  description: "List all open desktop windows. params: {}"
+  params_schema: {}
+  risk_level: low
+
+- token: "ACT:PC_GET_UI_TREE"
+  patterns: ["\\bui tree\\b", "\\baccessibility tree\\b", "\\bdesktop elements\\b", "\\bui elements\\b"]
+  target: pc
+  description: "Get accessibility tree of a desktop window. params: {window_title?, max_depth?}"
+  params_schema:
+    window_title: "string"
+    max_depth: "number"
+  risk_level: low
+
+- token: "ACT:PC_CLICK"
+  patterns: ["\\bdesktop click\\b", "\\bui click\\b", "\\bclick on desktop\\b", "\\bclick button\\b"]
+  target: pc
+  description: "Click a UI element by automation_id, name, or control_type. params: {selector, window_title?}"
+  params_schema:
+    selector: "string"
+    window_title: "string"
+  risk_level: medium
+
+- token: "ACT:PC_FILL"
+  patterns: ["\\bdesktop type\\b", "\\bui type\\b", "\\btype in desktop\\b", "\\bfill desktop input\\b"]
+  target: pc
+  description: "Type text into a desktop UI element. params: {selector, value, window_title?}"
+  params_schema:
+    selector: "string"
+    value: "string"
+    window_title: "string"
+  risk_level: medium
+
+- token: "ACT:PC_PRESS"
+  patterns: ["\\bpress key\\b", "\\bhotkey\\b", "\\bkeyboard shortcut\\b"]
+  target: pc
+  description: "Press a key or key combination. params: {keys, window_title?}"
+  params_schema:
+    keys: "string"
+    window_title: "string"
+  risk_level: low
+
+- token: "ACT:PC_SCREENSHOT"
+  patterns: ["\\bdesktop screenshot\\b", "\\bscreen capture\\b", "\\bcapture screen\\b"]
+  target: pc
+  description: "Take a screenshot of a desktop window. params: {window_title?}"
+  params_schema:
+    window_title: "string"
+  risk_level: low
+
+- token: "ACT:PC_LAUNCH"
+  patterns: ["\\blaunch app\\b", "\\bopen app\\b", "\\bstart app\\b", "\\brun app\\b"]
+  target: pc
+  description: "Launch a desktop application. params: {app_path, args?}"
+  params_schema:
+    app_path: "string"
+    args: "string"
+  risk_level: low
+
+- token: "ACT:PC_FOCUS"
+  patterns: ["\\bfocus window\\b", "\\bbring to front\\b", "\\bactivate window\\b"]
+  target: pc
+  description: "Bring a window to focus. params: {window_title}"
+  params_schema:
+    window_title: "string"
+  risk_level: low
+
+# ── Science Research Engine ──────────────────────────────────
+- token: "ACT:SCIENCE_RESEARCH"
+  patterns: ["\\bresearch\\b", "\\bscience\\b", "\\bstudy\\b", "\\binvestigate\\b", "\\bhypothesis\\b"]
+  target: system
+  description: "Science research with Socratic rebuttal. Auto-detects domain (new_energy, pharma, cross_domain). Checks claims against physics laws and literature. params: {query, depth? (normal|deep)}"
+  params_schema:
+    query: "string"
+    depth: "string"
+  risk_level: low
+
+- token: "ACT:ANALYZE_MOLECULE"
+  patterns: ["\\banalyze molecule\\b", "\\bsmiles\\b", "\\bdrug likeness\\b", "\\blipinski\\b"]
+  target: system
+  description: "Analyze molecule drug-likeness using RDKit. Returns MW, LogP, HBD, HBA, TPSA, Lipinski Ro5. params: {smiles}"
+  params_schema:
+    smiles: "string"
+  risk_level: low
+
+- token: "ACT:CHECK_BATTERY_CLAIM"
+  patterns: ["\\bbattery claim\\b", "\\benergy density\\b", "\\bwh/kg\\b"]
+  target: system
+  description: "Validate battery energy density claim against theoretical limits. params: {material, energy_density}"
+  params_schema:
+    material: "string"
+    energy_density: "number"
+  risk_level: low
+
+- token: "ACT:CHECK_FUSION_LAWSON"
+  patterns: ["\\bfusion\\b", "\\blawson\\b", "\\bignition\\b", "\\bplasma\\b"]
+  target: system
+  description: "Check if fusion conditions meet Lawson criterion. params: {density_m3, confinement_s, temperature_kev}"
+  params_schema:
+    density_m3: "number"
+    confinement_s: "number"
+    temperature_kev: "number"
+  risk_level: low
+
+- token: "ACT:COMPUTE_DEBYE_LENGTH"
+  patterns: ["\\bdebye\\b", "\\belectrolyte\\b", "\\bscreening\\b"]
+  target: system
+  description: "Compute Debye length for electrolyte screening. params: {temperature_k, concentration_mol_L, charge_number?}"
+  params_schema:
+    temperature_k: "number"
+    concentration_mol_L: "number"
+    charge_number: "number"
   risk_level: low
