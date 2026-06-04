@@ -127,12 +127,28 @@ def build_agent(settings: Settings, on_event=None) -> AgentLoop:
         compress_llm_call=_compression_call,
     )
 
-    # Initialize Science Research Engine
+    # Initialize Science Research Engine with real clients
     from research.science_engine import ScienceEngine
+    from research.sources.pubmed import PubMedClient
+    from research.sources.arxiv import ArxivClient
+    from memory.hard_memory import PHYSICS_CONSTANTS
+    from filters.zero_error_filter import ZeroErrorFilter
+    from filters.unit_standardizer import UnitStandardizer
     from tools.builtin import set_science_engine
+    import os
+
+    _pubmed = PubMedClient(api_key=os.getenv("PUBMED_API_KEY", ""))
+    _arxiv  = ArxivClient()
+    _zef    = ZeroErrorFilter()
+    _units  = UnitStandardizer()
+
     science_engine = ScienceEngine(
-        llm_client=None,  # Will use agent's LLM if needed
-        hard_memory=None,  # Will import from memory.hard_memory
+        llm_client=None,           # wired below after agent build
+        arxiv=_arxiv,
+        pubmed=_pubmed,
+        hard_memory=PHYSICS_CONSTANTS,
+        zero_error_filter=_zef,
+        unit_standardizer=_units,
     )
     set_science_engine(science_engine)
 
@@ -148,6 +164,27 @@ def build_agent(settings: Settings, on_event=None) -> AgentLoop:
 
     # Wire fast-path LLM into dream controller for quick concept matching
     agent.dream_controller.fast_llm_call = _fast_path_call
+
+    # Wire LLM into science engine so hypothesis generation works
+    async def _science_llm(prompt: str, max_tokens: int = 300) -> str:
+        try:
+            result = await _reasoning_call(
+                [{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+            )
+            return result.get("content", "")
+        except Exception:
+            return ""
+
+    science_engine.llm = type("LLMWrapper", (), {
+        "complete_raw": staticmethod(_science_llm)
+    })()
+    science_engine.rebuttal.arxiv  = _arxiv
+    science_engine.rebuttal.pubmed = _pubmed
+
+    # Wire debate engine
+    from research.debate import SequentialDebate
+    agent.debate_engine = SequentialDebate(llm_call=_reasoning_call)
 
     return agent
 
