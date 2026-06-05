@@ -21,12 +21,18 @@ class IntentTracker:
                 data = json.loads(TASK_DB_PATH.read_text())
                 for task_id, node_data in data.items():
                     self._tasks[task_id] = TaskNode(**node_data)
-                # Auto-cleanup: remove completed/abandoned tasks older than 24h
-                cutoff = time.time() - 86400
+                # Auto-cleanup: remove completed/abandoned tasks older than 2h
+                cutoff = time.time() - 7200
                 stale = [tid for tid, t in self._tasks.items()
                          if t.status in ("completed", "abandoned") and t.updated_at < cutoff]
                 for tid in stale:
                     del self._tasks[tid]
+                # Also limit total tasks to 20 (keep most recent)
+                if len(self._tasks) > 20:
+                    sorted_tasks = sorted(self._tasks.items(),
+                                          key=lambda x: x[1].updated_at, reverse=True)
+                    self._tasks = dict(sorted_tasks[:20])
+                    stale = ["overflow"]
                 if stale:
                     self._save()
             except Exception:

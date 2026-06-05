@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -81,6 +82,7 @@ class AgentLoop:
         self._recent_goals = []  # Track recent goals for repetition detection
         self._recent_tool_calls = []  # (func_name, args_hash) for dedup
         self._recently_written_files = set()  # Files written in this session — don't re-read
+        self._read_file_paths = set()  # Path-level dedup: block re-reads entirely
 
         # Tool schemas for native function calling
         self._tools_schema = self.codebook.get_tools_schema()
@@ -177,6 +179,7 @@ class AgentLoop:
 
         # Reset dedup tracker for new conversation
         self._recent_tool_calls = []
+        self._read_file_paths = set()
 
         # Track task in IntentTracker for cross-session continuity
         task_id = self.intent_tracker.create_task(goal, session_id)
@@ -306,8 +309,8 @@ class AgentLoop:
 
                 # Auto-inject research skill for research tasks
                 research_keywords = ["research", "write about", "find information", "tell me about",
-                                     "explain", "what is", "how does", "compare", "analyze",
-                                     "study", "report", "paper", "article", "investigate"]
+                                     "what is", "how does", "compare", "analyze",
+                                     "study of", "report on", "paper on", "article about", "investigate"]
                 goal_lower = goal.lower()
                 if any(kw in goal_lower for kw in research_keywords):
                     research_skill = self.skill_loader.load_skill_content("research")
@@ -476,6 +479,27 @@ class AgentLoop:
                     call_hash = hashlib.md5(call_key.encode()).hexdigest()[:12]
                     call_count = sum(1 for h in self._recent_tool_calls if h == call_hash)
 
+                    # Path-level dedup: block read_file entirely after first read
+                    # (prevents LLM from re-reading with different offset/line args)
+                    if func_name == "read_file" and "path" in args:
+                        norm_path = os.path.normpath(args["path"])
+                        if norm_path in self._read_file_paths:
+                            result = ToolResult(
+                                success=False, tool_name=func_name,
+                                error=f"Blocked: you already read {args['path']} completely. Use the content you already have."
+                            )
+                            state.messages.append({
+                                "role": "tool",
+                                "tool_call_id": tc_id,
+                                "content": f"BLOCKED: You already read {args['path']} completely. "
+                                           f"The full content was returned to you. STOP re-reading. "
+                                           f"Use the content you already have. Edit or move on.",
+                            })
+                            state.tool_calls_made += 1
+                            self._emit(EventType.OBSERVATION, f"Blocked path re-read: {func_name}", state)
+                            continue
+                        self._read_file_paths.add(norm_path)
+
                     # Special: block read_file after 1 call (save tokens)
                     if func_name == "read_file" and call_count >= 1:
                         result = ToolResult(
@@ -583,8 +607,8 @@ class AgentLoop:
 
                 # Research task check: ensure search tools are used
                 research_keywords = ["research", "write about", "find information", "tell me about",
-                                     "explain", "what is", "how does", "compare", "analyze",
-                                     "study", "report", "paper", "article", "investigate"]
+                                     "what is", "how does", "compare", "analyze",
+                                     "study of", "report on", "paper on", "article about", "investigate"]
                 is_research_task = any(kw in goal.lower() for kw in research_keywords)
                 if is_research_task and state.tool_calls_made == 3:
                     # Check if search tools were used
