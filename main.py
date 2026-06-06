@@ -97,6 +97,17 @@ def build_agent(settings: Settings, on_event=None) -> AgentLoop:
     soft_memory = SoftMemory()
     from tools.builtin.memory_tools import set_soft_memory
     set_soft_memory(soft_memory)
+
+    # Dynamic tool registry
+    from core.dynamic_tools import DynamicToolRegistry
+    from tools.builtin import set_dynamic_registry
+    dynamic_registry = DynamicToolRegistry()
+    set_dynamic_registry(dynamic_registry)
+
+    # Register existing dynamic tools with tools_manager
+    for name, fn in dynamic_registry.get_all_tools().items():
+        tools_manager.register(name, fn)
+
     codebook = CodebookCompiler()
 
     token_stats = {"prompt": 0, "completion": 0, "total": 0, "model": ""}

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zenith-OS</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">Z</div>
+                <span class="logo-text">Zenith-OS</span>
+            </div>
+
+            <nav class="nav">
+                <button class="nav-btn active" data-tab="chat" title="Chat">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <span>Chat</span>
+                </button>
+                <button class="nav-btn" data-tab="research" title="Research">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="M21 21l-4.35-4.35"></path>
+                    </svg>
+                    <span>Research</span>
+                </button>
+                <button class="nav-btn" data-tab="memory" title="Memory">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5"></path>
+                        <path d="M2 12l10 5 10-5"></path>
+                    </svg>
+                    <span>Memory</span>
+                </button>
+                <button class="nav-btn" data-tab="tools" title="Tools">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                    </svg>
+                    <span>Tools</span>
+                </button>
+                <button class="nav-btn" data-tab="dream" title="Dream">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <span>Dream</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="nav-btn" data-tab="settings" title="Settings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+                    </svg>
+                    <span>Settings</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Chat Tab -->
+            <div class="tab-content active" id="tab-chat">
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="welcome-message">
+                            <div class="welcome-icon">Z</div>
+                            <h2>Welcome to Zenith-OS</h2>
+                            <p>Your personal AI agent operating system. Ask me anything.</p>
+                        </div>
+                    </div>
+                    <div class="chat-input-area">
+                        <div class="input-wrapper">
+                            <textarea id="chatInput" placeholder="Ask Zenith anything..." rows="1"></textarea>
+                            <button class="send-btn" id="sendBtn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="input-hints">
+                            <span class="hint">Enter to send</span>
+                            <span class="hint">Shift+Enter for new line</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Research Tab -->
+            <div class="tab-content" id="tab-research">
+                <div class="content-header">
+                    <h1>Science Research</h1>
+                    <p>Deep research with Socratic rebuttal and multi-agent debate</p>
+                </div>
+                <div class="research-panel">
+                    <div class="research-input-group">
+                        <input type="text" id="researchQuery" class="neu-input" placeholder="Enter research topic...">
+                        <select id="researchDomain" class="neu-select">
+                            <option value="auto">Auto-detect domain</option>
+                            <option value="new_energy">New Energy</option>
+                            <option value="pharma">Pharmaceutical</option>
+                            <option value="physics">Physics</option>
+                            <option value="cross_domain">Cross-domain</option>
+                        </select>
+                        <button class="neu-btn primary" id="researchBtn">Research</button>
+                    </div>
+                    <div class="research-results" id="researchResults">
+                        <div class="placeholder-text">Enter a topic to start research...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Memory Tab -->
+            <div class="tab-content" id="tab-memory">
+                <div class="content-header">
+                    <h1>Memory</h1>
+                    <p>Long-term memory and knowledge base</p>
+                </div>
+                <div class="memory-panel">
+                    <div class="memory-stats">
+                        <div class="stat-card">
+                            <div class="stat-value" id="memoryCount">0</div>
+                            <div class="stat-label">Memories</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="desireCount">0</div>
+                            <div class="stat-label">Active Desires</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="associationCount">0</div>
+                            <div class="stat-label">Associations</div>
+                        </div>
+                    </div>
+                    <div class="memory-search">
+                        <input type="text" id="memorySearch" class="neu-input" placeholder="Search memories...">
+                    </div>
+                    <div class="memory-list" id="memoryList">
+                        <div class="placeholder-text">Loading memories...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tools Tab -->
+            <div class="tab-content" id="tab-tools">
+                <div class="content-header">
+                    <h1>Tools</h1>
+                    <p>48 registered tools across 10 categories</p>
+                </div>
+                <div class="tools-grid" id="toolsGrid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Dream Tab -->
+            <div class="tab-content" id="tab-dream">
+                <div class="content-header">
+                    <h1>Dream Mode</h1>
+                    <p>Idle-time reasoning and cross-domain innovation</p>
+                </div>
+                <div class="dream-panel">
+                    <div class="dream-status">
+                        <div class="dream-indicator" id="dreamIndicator">
+                            <div class="pulse"></div>
+                            <span>Idle</span>
+                        </div>
+                        <button class="neu-btn" id="dreamBtn">Start Dream Cycle</button>
+                    </div>
+                    <div class="dream-stats">
+                        <div class="stat-card">
+                            <div class="stat-value" id="dreamCycles">0</div>
+                            <div class="stat-label">Dream Cycles</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="dreamInsights">0</div>
+                            <div class="stat-label">Insights Generated</div>
+                        </div>
+                    </div>
+                    <div class="dream-log" id="dreamLog">
+                        <div class="placeholder-text">Dream insights will appear here...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div class="tab-content" id="tab-settings">
+                <div class="content-header">
+                    <h1>Settings</h1>
+                    <p>Configure Zenith-OS</p>
+                </div>
+                <div class="settings-panel">
+                    <div class="settings-group">
+                        <h3>LLM Provider</h3>
+                        <div class="setting-row">
+                            <label>Provider</label>
+                            <select class="neu-select" id="settingProvider">
+                                <option value="openai">OpenAI</option>
+                                <option value="groq">Groq</option>
+                                <option value="ollama">Ollama (Local)</option>
+                                <option value="nvidia">NVIDIA NIM</option>
+                            </select>
+                        </div>
+                        <div class="setting-row">
+                            <label>API Key</label>
+                            <input type="password" class="neu-input" id="settingApiKey" placeholder="sk-...">
+                        </div>
+                        <div class="setting-row">
+                            <label>Model</label>
+                            <input type="text" class="neu-input" id="settingModel" placeholder="gpt-4">
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <h3>Agent Behavior</h3>
+                        <div class="setting-row">
+                            <label>Max Iterations</label>
+                            <input type="number" class="neu-input" id="settingMaxIter" value="30">
+                        </div>
+                        <div class="setting-row">
+                            <label>Token Budget</label>
+                            <input type="number" class="neu-input" id="settingTokenBudget" value="100000">
+                        </div>
+                        <div class="setting-row">
+                            <label>Dream Mode</label>
+                            <label class="toggle">
+                                <input type="checkbox" id="settingDream" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <h3>Interface</h3>
+                        <div class="setting-row">
+                            <label>Theme</label>
+                            <select class="neu-select" id="settingTheme">
+                                <option value="light">Light</option>
+                                <option value="dark">Dark</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="neu-btn primary" id="saveSettings">Save Settings</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

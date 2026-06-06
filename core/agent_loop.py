@@ -498,7 +498,7 @@ class AgentLoop:
                             state.tool_calls_made += 1
                             self._emit(EventType.OBSERVATION, f"Blocked path re-read: {func_name}", state)
                             continue
-                        self._read_file_paths.add(norm_path)
+                        # Don't add to set yet — wait until read succeeds
 
                     # Special: block read_file after 1 call (save tokens)
                     if func_name == "read_file" and call_count >= 1:
@@ -592,6 +592,11 @@ class AgentLoop:
                     # Track written files to prevent re-reading
                     if func_name == "write_file" and result.success and "path" in args:
                         self._recently_written_files.add(args["path"])
+
+                    # Track read files to prevent re-reading (only on success)
+                    if func_name == "read_file" and result.success and "path" in args:
+                        norm_path = os.path.normpath(args["path"])
+                        self._read_file_paths.add(norm_path)
 
                 state.tool_calls_made += 1
 

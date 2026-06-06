@@ -1,0 +1,17 @@
+# Zenith-OS Desktop Application Requirements
+
+# Web framework
+flask>=3.0.0
+flask-sock>=0.7.0
+
+# Native window
+pywebview>=4.0.0
+
+# HTTP client
+httpx>=0.25.0
+
+# Configuration
+pyyaml>=6.0
+
+# Build tools (for installer)
+pyinstaller>=6.0.0
