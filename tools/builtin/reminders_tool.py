@@ -21,12 +21,38 @@ _reminder_thread = None
 _reminder_callbacks = []
 
 
-def _ensure_background_checker():
-    """Start background reminder checker if not running."""
-    global _reminder_thread
-    if _reminder_thread is None or not _reminder_thread.is_alive():
-        _reminder_thread = threading.Thread(target=_check_reminders_loop, daemon=True)
-        _reminder_thread.start()
+def _load() -> dict:
+    if REMINDERS_PATH.exists():
+        try:
+            return json.loads(REMINDERS_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, IOError):
+            pass
+    return {"reminders": []}
+
+
+def _save(data: dict) -> None:
+    REMINDERS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    REMINDERS_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _next_occurrence(recurrence: str, from_date: str = "") -> str:
+    """Calculate next occurrence based on recurrence pattern."""
+    try:
+        base = datetime.strptime(from_date, "%Y-%m-%d %H:%M") if from_date else datetime.now()
+    except ValueError:
+        base = datetime.now()
+    if recurrence == "daily":
+        return (base + timedelta(days=1)).strftime("%Y-%m-%d %H:%M")
+    elif recurrence == "weekly":
+        return (base + timedelta(weeks=1)).strftime("%Y-%m-%d %H:%M")
+    elif recurrence == "monthly":
+        month = base.month + 1
+        year = base.year
+        if month > 12:
+            month = 1
+            year += 1
+        return base.replace(year=year, month=month).strftime("%Y-%m-%d %H:%M")
+    return ""
 
 
 def _check_reminders_loop():
@@ -45,6 +71,15 @@ def _check_reminders_loop():
                             callback(r)
                         except Exception:
                             pass
+
+                    # Mark as triggered so it doesn't re-fire
+                    if r.get("recurrence"):
+                        # Recurring: schedule next occurrence
+                        r["datetime"] = _next_occurrence(r["recurrence"], r["datetime"])
+                        # Keep as pending for next occurrence
+                    else:
+                        # Non-recurring: mark as triggered
+                        r["status"] = "triggered"
                     updated = True
 
             if updated:
@@ -55,6 +90,14 @@ def _check_reminders_loop():
         time.sleep(30)  # Check every 30 seconds
 
 
+def _ensure_background_checker():
+    """Start background reminder checker if not running."""
+    global _reminder_thread
+    if _reminder_thread is None or not _reminder_thread.is_alive():
+        _reminder_thread = threading.Thread(target=_check_reminders_loop, daemon=True)
+        _reminder_thread.start()
+
+
 def on_reminder_due(callback):
     """Register a callback for when a reminder is due. Callback receives reminder dict."""
     _reminder_callbacks.append(callback)
@@ -62,37 +105,6 @@ def on_reminder_due(callback):
 
 # Start background checker on import
 _ensure_background_checker()
-
-
-def _load() -> dict:
-    if REMINDERS_PATH.exists():
-        try:
-            return json.loads(REMINDERS_PATH.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, IOError):
-            pass
-    return {"reminders": []}
-
-
-def _save(data: dict) -> None:
-    REMINDERS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REMINDERS_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-def _next_occurrence(recurrence: str, from_date: str = "") -> str:
-    """Calculate next occurrence based on recurrence pattern."""
-    base = datetime.strptime(from_date, "%Y-%m-%d %H:%M") if from_date else datetime.now()
-    if recurrence == "daily":
-        return (base + timedelta(days=1)).strftime("%Y-%m-%d %H:%M")
-    elif recurrence == "weekly":
-        return (base + timedelta(weeks=1)).strftime("%Y-%m-%d %H:%M")
-    elif recurrence == "monthly":
-        month = base.month + 1
-        year = base.year
-        if month > 12:
-            month = 1
-            year += 1
-        return base.replace(year=year, month=month).strftime("%Y-%m-%d %H:%M")
-    return ""
 
 
 async def reminders(args: dict) -> dict:

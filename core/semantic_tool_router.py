@@ -23,6 +23,21 @@ TOOL_KEYWORDS = {
     "browse_eval": ["javascript", "eval", "js", "script"],
     "browse_wait": ["wait", "loading", "delay"],
     "browse_get": ["get text", "get url", "page title", "page content"],
+    "browse_scroll": ["scroll", "swipe", "scroll down", "scroll up"],
+    "browse_scroll_to": ["scroll to", "scroll element"],
+    "browse_hover": ["hover", "mouse over", "dropdown", "tooltip"],
+    "browse_right_click": ["right click", "context menu"],
+    "browse_double_click": ["double click", "dblclick"],
+    "browse_select": ["select", "dropdown", "choose option"],
+    "browse_keypress": ["press key", "hotkey", "keyboard", "shortcut", "ctrl"],
+    "browse_drag": ["drag", "drag and drop", "drop"],
+    "browse_focus": ["focus element", "focus input"],
+    "browse_highlight": ["highlight", "mark element"],
+    "browse_get_links": ["get links", "list links", "extract links"],
+    "browse_get_forms": ["get forms", "list forms", "form fields"],
+    "browse_back": ["go back", "browser back", "history back"],
+    "browse_forward": ["go forward", "browser forward"],
+    "browse_refresh": ["refresh", "reload page"],
     "read_file": ["read", "file", "show", "view", "cat", "open file"],
     "write_file": ["write", "create file", "save", "new file"],
     "edit_file": ["edit", "modify", "change", "update file", "fix"],
@@ -75,8 +90,11 @@ class SemanticToolRouter:
         self._tool_schemas = tools_schema
         self._tool_names = [t.get("function", {}).get("name", "") for t in tools_schema]
 
-    def select(self, user_message: str, top_k: int = 12) -> list[dict]:
-        """Select relevant tools based on keyword matching + recency."""
+    def select(self, user_message: str, top_k: int = 8) -> list[dict]:
+        """Select relevant tools based on keyword matching + recency.
+
+        Returns fewer tools for simple queries to save tokens.
+        """
         msg_lower = user_message.lower()
         scored = []
 
@@ -109,9 +127,20 @@ class SemanticToolRouter:
 
             scored.append((score, i, schema))
 
-        # Sort by score, take top_k
+        # Sort by score
         scored.sort(key=lambda x: x[0], reverse=True)
-        selected = [s[2] for s in scored[:top_k]]
+
+        # Dynamic top_k: if top score is high (clear match), use fewer tools
+        max_score = scored[0][0] if scored else 0
+        if max_score >= 4.0:
+            # Strong match — only include highly relevant tools
+            effective_k = min(5, top_k)
+        elif max_score >= 2.0:
+            effective_k = min(8, top_k)
+        else:
+            effective_k = top_k
+
+        selected = [s[2] for s in scored[:effective_k]]
 
         # Always include ALWAYS_INCLUDE tools
         selected_names = {s.get("function", {}).get("name", "") for s in selected}
