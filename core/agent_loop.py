@@ -1,8 +1,11 @@
 from __future__ import annotations
 import asyncio
+import base64
 import json
 import logging
 import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -681,7 +684,6 @@ class AgentLoop:
                     display = f"Page snapshot captured"
                 elif func_name == "browse_screenshot" and result.success:
                     # Save screenshot and auto-open for user
-                    import base64, os, time, subprocess, sys
                     data = result.data or {}
                     # browse CLI may nest the base64 in different places
                     b64 = data.get("base64", "")

@@ -29,34 +29,46 @@ def run_server(port: int):
     app.run(host='127.0.0.1', port=port, debug=False, use_reloader=False)
 
 
-def wait_for_server(port: int, timeout: int = 10):
+def wait_for_server(port: int, timeout: int = 15):
     """Wait for the server to be ready."""
-    import httpx
+    import urllib.request
     start = time.time()
     while time.time() - start < timeout:
         try:
-            r = httpx.get(f'http://127.0.0.1:{port}/', timeout=1)
-            if r.status_code == 200:
+            req = urllib.request.urlopen(f'http://127.0.0.1:{port}/', timeout=1)
+            if req.getcode() == 200:
                 return True
         except Exception:
             pass
-        time.sleep(0.2)
+        time.sleep(0.3)
     return False
 
 
 def main():
     """Launch Zenith-OS desktop application."""
+    port = find_free_port()
+    print()
+    print("  Zenith-OS")
+    print("  =========")
+
+    # Preload embedding model before starting server
+    print("  Loading embedding model...")
     try:
-        import webview
-    except ImportError:
-        print("pywebview not installed. Run: pip install pywebview")
-        print("Falling back to browser mode...")
-        return main_browser()
+        from memory.soft_memory import SoftMemory
+        _mem = SoftMemory()  # This loads the model
+        print("  Model loaded.")
+    except Exception as e:
+        print(f"  Warning: Model load failed: {e}")
 
-    # Find a free port
-    port = find_free_port()
-    print(f"\n  Zenith-OS Desktop")
-    print(f"  ================")
+    # Preload agent (connects to LLM, loads tools)
+    print("  Initializing agent...")
+    try:
+        from app.server import get_agent
+        get_agent()
+        print("  Agent ready.")
+    except Exception as e:
+        print(f"  Warning: Agent init failed: {e}")
+
     print(f"  Starting server on port {port}...")
 
     # Start server in background thread
@@ -65,54 +77,38 @@ def main():
 
     # Wait for server to be ready
     if not wait_for_server(port):
-        print("  ERROR: Server failed to start")
-        return 1
-
-    print(f"  Server ready at http://127.0.0.1:{port}")
-    print(f"  Opening native window...\n")
-
-    # Create native window
-    window = webview.create_window(
-        title='Zenith-OS',
-        url=f'http://127.0.0.1:{port}',
-        width=1280,
-        height=800,
-        min_size=(800, 600),
-        resizable=True,
-        text_select=True,
-    )
-
-    # Start the webview event loop
-    webview.start(debug=False)
-
-    return 0
-
-
-def main_browser():
-    """Fallback: open in default browser."""
-    import webbrowser
-
-    port = find_free_port()
-    print(f"\n  Zenith-OS Web")
-    print(f"  =============")
-    print(f"  Starting server on port {port}...")
-
-    # Start server in background thread
-    server_thread = threading.Thread(target=run_server, args=(port,), daemon=True)
-    server_thread.start()
-
-    # Wait for server to be ready
-    if not wait_for_server(port):
-        print("  ERROR: Server failed to start")
+        print("  ERROR: Server failed to start. Check for errors above.")
+        input("  Press Enter to exit...")
         return 1
 
     url = f'http://127.0.0.1:{port}'
     print(f"  Server ready at {url}")
-    print(f"  Opening browser...\n")
 
+    # Try native window first
+    try:
+        import webview
+        print("  Opening native window...")
+        window = webview.create_window(
+            title='Zenith-OS',
+            url=url,
+            width=1280,
+            height=800,
+            min_size=(800, 600),
+            resizable=True,
+            text_select=True,
+        )
+        webview.start(debug=False)
+        return 0
+    except ImportError:
+        print("  pywebview not installed, opening browser...")
+    except Exception as e:
+        print(f"  pywebview error: {e}, opening browser...")
+
+    # Fallback to browser
+    import webbrowser
     webbrowser.open(url)
+    print("  Opened in browser. Press Ctrl+C to stop.")
 
-    # Keep main thread alive
     try:
         while True:
             time.sleep(1)
