@@ -10,11 +10,58 @@ Single entry point: reminders(action, ...) with actions:
 from __future__ import annotations
 import json
 import uuid
+import time
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
 
 REMINDERS_PATH = Path.home() / ".zenith" / "reminders.json"
+_reminder_thread = None
+_reminder_callbacks = []
+
+
+def _ensure_background_checker():
+    """Start background reminder checker if not running."""
+    global _reminder_thread
+    if _reminder_thread is None or not _reminder_thread.is_alive():
+        _reminder_thread = threading.Thread(target=_check_reminders_loop, daemon=True)
+        _reminder_thread.start()
+
+
+def _check_reminders_loop():
+    """Background loop that checks for due reminders and triggers notifications."""
+    while True:
+        try:
+            data = _load()
+            now = datetime.now().strftime("%Y-%m-%d %H:%M")
+            updated = False
+
+            for r in data.get("reminders", []):
+                if r.get("status") == "pending" and r.get("datetime", "") <= now:
+                    # Trigger notification callbacks
+                    for callback in _reminder_callbacks:
+                        try:
+                            callback(r)
+                        except Exception:
+                            pass
+                    updated = True
+
+            if updated:
+                _save(data)
+        except Exception:
+            pass
+
+        time.sleep(30)  # Check every 30 seconds
+
+
+def on_reminder_due(callback):
+    """Register a callback for when a reminder is due. Callback receives reminder dict."""
+    _reminder_callbacks.append(callback)
+
+
+# Start background checker on import
+_ensure_background_checker()
 
 
 def _load() -> dict:

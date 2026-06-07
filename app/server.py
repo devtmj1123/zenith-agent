@@ -9,6 +9,7 @@ import logging
 import os
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -32,19 +33,30 @@ sock = Sock(app)
 # Global agent instance (initialized on startup)
 _agent = None
 _settings = None
+_agent_ready = False
+_agent_status = "loading"
+_connected_ws_clients = set()  # Track connected WebSocket clients for notifications
 
 
 def get_agent():
     """Get or create the Zenith agent."""
-    global _agent, _settings
+    global _agent, _settings, _agent_ready, _agent_status
     if _agent is None:
-        from config.settings import Settings
-        from main import build_agent
+        try:
+            _agent_status = "loading_model"
+            from config.settings import Settings
+            from main import build_agent
 
-        _settings = Settings()
-        _settings.load_from_env()
+            _settings = Settings()
+            _settings.load_from_env()
 
-        _agent = build_agent(_settings, on_event=lambda e: None)
+            _agent_status = "initializing_agent"
+            _agent = build_agent(_settings, on_event=lambda e: None)
+            _agent_ready = True
+            _agent_status = "ready"
+        except Exception as e:
+            _agent_status = f"error: {str(e)[:100]}"
+            raise
     return _agent
 
 
@@ -57,11 +69,60 @@ def run_async(coro):
         loop.close()
 
 
+# ===== Reminder Notifications =====
+def _start_reminder_notifier():
+    """Start background thread that checks for due reminders and notifies WebSocket clients."""
+    def _notifier_loop():
+        # Import here to avoid circular imports
+        time.sleep(5)  # Wait for server to start
+        try:
+            from tools.builtin.reminders_tool import on_reminder_due
+            def _on_due(reminder):
+                notification = {
+                    'type': 'reminder',
+                    'content': {
+                        'title': reminder.get('title', 'Reminder'),
+                        'description': reminder.get('description', ''),
+                        'datetime': reminder.get('datetime', ''),
+                        'id': reminder.get('id', ''),
+                    }
+                }
+                # Send to all connected clients
+                dead_clients = set()
+                for ws in list(_connected_ws_clients):
+                    try:
+                        ws.send(json.dumps(notification))
+                    except Exception:
+                        dead_clients.add(ws)
+                _connected_ws_clients.difference_update(dead_clients)
+
+            on_reminder_due(_on_due)
+            log.info("Reminder notification system started")
+        except Exception as e:
+            log.warning(f"Could not start reminder notifier: {e}")
+
+    t = threading.Thread(target=_notifier_loop, daemon=True)
+    t.start()
+
+
+# Start reminder notifier
+_start_reminder_notifier()
+
+
 # ===== Routes =====
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
+
+@app.route('/api/status')
+def api_status():
+    """Check if agent is ready."""
+    return jsonify({
+        'ready': _agent_ready,
+        'status': _agent_status,
+    })
 
 
 @app.route('/static/<path:filename>')
@@ -177,6 +238,76 @@ def api_settings():
     return jsonify({'status': 'ok'})
 
 
+@app.route('/api/diagnosis')
+def api_diagnosis():
+    """Run self-diagnosis."""
+    try:
+        from core.self_diagnosis import run_diagnosis
+        result = run_diagnosis()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/diagnosis/fix', methods=['POST'])
+def api_diagnosis_fix():
+    """Run auto-fix for diagnosed issues."""
+    try:
+        from core.self_diagnosis import run_auto_fix
+        result = run_auto_fix()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/reminders')
+def api_reminders():
+    """List all pending reminders."""
+    try:
+        from tools.builtin.reminders_tool import reminders
+        result = run_async(reminders({"action": "list"}))
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"reminders": [], "error": str(e)})
+
+
+@app.route('/api/reminders/create', methods=['POST'])
+def api_create_reminder():
+    """Create a new reminder."""
+    try:
+        data = request.json or {}
+        from tools.builtin.reminders_tool import reminders
+        args = {
+            "action": "create",
+            "title": data.get("title", ""),
+            "datetime": data.get("datetime", ""),
+            "description": data.get("description", ""),
+        }
+        result = run_async(reminders(args))
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/reminders/dismiss', methods=['POST'])
+def api_dismiss_reminder():
+    """Dismiss a reminder."""
+    try:
+        data = request.json or {}
+        from tools.builtin.reminders_tool import reminders
+        result = run_async(reminders({"action": "dismiss", "reminder_id": data.get("reminder_id", "")}))
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    """Run auto-fix."""
+    try:
+        from core.self_diagnosis import run_auto_fix
+        result = run_auto_fix()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ===== WebSocket =====
 
 @sock.route('/ws')
@@ -185,7 +316,31 @@ def websocket(ws):
 
     IMPORTANT: flask-sock is synchronous. All work must happen in this thread.
     """
-    agent = get_agent()
+    # Register client for notifications
+    _connected_ws_clients.add(ws)
+
+    # Try to get agent, handle failure gracefully
+    try:
+        agent = get_agent()
+    except Exception as e:
+        log.error(f"Agent init failed: {e}")
+        ws.send(json.dumps({
+            'type': 'error',
+            'content': f'Agent initialization failed: {str(e)[:200]}'
+        }))
+        # Keep connection alive so frontend can retry
+        while True:
+            data = ws.receive()
+            if not data:
+                break
+            msg = json.loads(data) if data else {}
+            if msg.get('type') == 'ping':
+                ws.send(json.dumps({'type': 'pong'}))
+            elif msg.get('type') == 'status_request':
+                ws.send(json.dumps({'type': 'status', 'ready': False, 'error': str(e)[:200]}))
+        _connected_ws_clients.discard(ws)
+        return
+
     session_id = f"ws_{id(ws)}"
 
     try:
@@ -268,6 +423,8 @@ def websocket(ws):
 
     except Exception as e:
         log.error(f"WebSocket error: {e}", exc_info=True)
+    finally:
+        _connected_ws_clients.discard(ws)
 
 
 # ===== Main =====

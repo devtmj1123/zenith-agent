@@ -11,7 +11,11 @@ from .reminders_tool import reminders
 from .weather import WeatherTool
 from .browse_tool import (
     browse_open, browse_snapshot, browse_click, browse_fill,
-    browse_get, browse_screenshot, browse_skills, browse_eval, browse_wait
+    browse_get, browse_screenshot, browse_skills, browse_eval, browse_wait,
+    browse_scroll, browse_scroll_to, browse_hover, browse_right_click,
+    browse_double_click, browse_select, browse_keypress, browse_drag,
+    browse_focus, browse_highlight, browse_get_links, browse_get_forms,
+    browse_back, browse_forward, browse_refresh
 )
 from .pc_control import (
     pc_get_windows, pc_get_ui_tree, pc_click, pc_fill,
@@ -249,6 +253,21 @@ BUILTIN_TOOLS = {
     "browse_skills": browse_skills,
     "browse_eval": browse_eval,
     "browse_wait": browse_wait,
+    "browse_scroll": browse_scroll,
+    "browse_scroll_to": browse_scroll_to,
+    "browse_hover": browse_hover,
+    "browse_right_click": browse_right_click,
+    "browse_double_click": browse_double_click,
+    "browse_select": browse_select,
+    "browse_keypress": browse_keypress,
+    "browse_drag": browse_drag,
+    "browse_focus": browse_focus,
+    "browse_highlight": browse_highlight,
+    "browse_get_links": browse_get_links,
+    "browse_get_forms": browse_get_forms,
+    "browse_back": browse_back,
+    "browse_forward": browse_forward,
+    "browse_refresh": browse_refresh,
     # PC Control — Windows UIA desktop automation
     "pc_get_windows": pc_get_windows,
     "pc_get_ui_tree": pc_get_ui_tree,

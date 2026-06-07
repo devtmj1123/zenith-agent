@@ -5,17 +5,94 @@ class ZenithApp {
         this.currentTab = 'chat';
         this.messages = [];
         this.particles = [];
+        this.agentReady = false;
+        this.activityLog = []; // Narrator activity log
+        this.notificationPermission = false;
         this.init();
     }
 
     init() {
+        this.checkAgentStatus();
         this.bindEvents();
         this.connectWebSocket();
         this.loadSettings();
-        this.loadTools();
-        this.loadMemoryStats();
         this.initParticles();
         this.initRippleEffects();
+        this.requestNotificationPermission();
+    }
+
+    // ===== Loading Screen =====
+    async checkAgentStatus() {
+        const loadingScreen = document.getElementById('loadingScreen');
+        const loadingBar = document.getElementById('loadingBar');
+        const loadingStatus = document.getElementById('loadingStatus');
+        const mainApp = document.getElementById('mainApp');
+
+        const statusMessages = {
+            'loading': 'Loading embedding model...',
+            'loading_model': 'Loading embedding model...',
+            'initializing_agent': 'Initializing agent...',
+            'ready': 'Ready!',
+        };
+
+        let attempts = 0;
+        const maxAttempts = 120; // 60 seconds max
+
+        const poll = async () => {
+            attempts++;
+            if (attempts > maxAttempts) {
+                loadingStatus.textContent = 'Timeout - agent may still be loading...';
+                this.showMainApp();
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+
+                // Update loading bar
+                const progress = data.ready ? 100 : Math.min(90, attempts * 2);
+                loadingBar.style.width = progress + '%';
+
+                // Update status text
+                if (data.status && data.status.startsWith('error:')) {
+                    loadingStatus.innerHTML = `<span style="color: var(--error)">${data.status}</span>`;
+                    // Still show main app after error
+                    setTimeout(() => this.showMainApp(), 2000);
+                    return;
+                }
+
+                loadingStatus.textContent = statusMessages[data.status] || data.status;
+
+                if (data.ready) {
+                    this.agentReady = true;
+                    loadingBar.style.width = '100%';
+                    loadingStatus.textContent = 'Ready!';
+                    setTimeout(() => this.showMainApp(), 500);
+                    return;
+                }
+
+                // Continue polling
+                setTimeout(poll, 500);
+            } catch (err) {
+                loadingStatus.textContent = 'Connecting to server...';
+                setTimeout(poll, 1000);
+            }
+        };
+
+        poll();
+    }
+
+    showMainApp() {
+        const loadingScreen = document.getElementById('loadingScreen');
+        const mainApp = document.getElementById('mainApp');
+
+        loadingScreen.classList.add('hidden');
+        mainApp.style.display = '';
+
+        // Load data after showing main app
+        this.loadTools();
+        this.loadMemoryStats();
     }
 
     // ===== Particle Background =====
@@ -158,6 +235,13 @@ class ZenithApp {
         };
     }
 
+    reconnectWebSocket() {
+        if (this.ws) {
+            this.ws.close();
+        }
+        this.connectWebSocket();
+    }
+
     updateConnectionStatus(connected) {
         // Could add a visual indicator
     }
@@ -195,9 +279,22 @@ class ZenithApp {
             this.startResearch();
         });
 
+        // Reminders
+        document.getElementById('createReminderBtn')?.addEventListener('click', () => {
+            this.createReminder();
+        });
+
         // Dream
         document.getElementById('dreamBtn')?.addEventListener('click', () => {
             this.startDreamCycle();
+        });
+
+        // Diagnosis
+        document.getElementById('runDiagnosisBtn')?.addEventListener('click', () => {
+            this.runDiagnosis();
+        });
+        document.getElementById('runAutoFixBtn')?.addEventListener('click', () => {
+            this.runAutoFix();
         });
 
         // Settings
@@ -233,6 +330,8 @@ class ZenithApp {
             this.loadTools();
         } else if (tabName === 'dream') {
             this.loadDreamStats();
+        } else if (tabName === 'reminders') {
+            this.loadReminders();
         }
     }
 
@@ -273,7 +372,15 @@ class ZenithApp {
             .then(res => res.json())
             .then(data => {
                 this.hideTypingIndicator();
-                this.addMessage('assistant', data.response);
+                this.addMessage('assistant', data.response, {
+                    tool_calls: data.tool_calls || 0,
+                    tokens_used: data.tokens_used || 0,
+                });
+                if (data.tool_calls > 0) {
+                    this.addNarratorEntry(`Response generated using ${data.tool_calls} tool${data.tool_calls > 1 ? 's' : ''}`, '✅');
+                }
+                const preview = (data.response || '').substring(0, 100).replace(/\n/g, ' ');
+                this.sendNotification('Zenith-OS', preview, '⚡');
             })
             .catch(err => {
                 this.hideTypingIndicator();
@@ -282,7 +389,7 @@ class ZenithApp {
         }
     }
 
-    addMessage(role, content) {
+    addMessage(role, content, meta = {}) {
         const container = document.getElementById('chatMessages');
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${role}`;
@@ -295,15 +402,43 @@ class ZenithApp {
         contentDiv.className = 'message-content';
         contentDiv.innerHTML = this.formatMessage(content);
 
+        // Metadata bar (timestamp, tokens, tools)
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'message-meta';
+
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        let metaHtml = `<span class="meta-time">${timeStr}</span>`;
+
+        if (meta.tool_calls > 0) {
+            metaHtml += `<span class="meta-tools">🔧 ${meta.tool_calls} tools</span>`;
+        }
+        if (meta.tokens_used > 0) {
+            metaHtml += `<span class="meta-tokens">📊 ${meta.tokens_used} tokens</span>`;
+        }
+        if (meta.tokens_in > 0) {
+            metaHtml += `<span class="meta-tokens-in">↓${meta.tokens_in}</span>`;
+        }
+        if (meta.tokens_out > 0) {
+            metaHtml += `<span class="meta-tokens-out">↑${meta.tokens_out}</span>`;
+        }
+
+        metaDiv.innerHTML = metaHtml;
+
         messageDiv.appendChild(avatar);
-        messageDiv.appendChild(contentDiv);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'message-wrapper';
+        wrapper.appendChild(contentDiv);
+        wrapper.appendChild(metaDiv);
+        messageDiv.appendChild(wrapper);
         container.appendChild(messageDiv);
 
         // Scroll to bottom
         container.scrollTop = container.scrollHeight;
 
         // Store message
-        this.messages.push({ role, content, timestamp: Date.now() });
+        this.messages.push({ role, content, timestamp: Date.now(), meta });
     }
 
     formatMessage(content) {
@@ -329,9 +464,12 @@ class ZenithApp {
         indicator.className = 'typing-indicator';
         indicator.id = 'typingIndicator';
         indicator.innerHTML = `
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
+            <div class="typing-dots">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+            <span class="typing-text">Thinking...</span>
         `;
         container.appendChild(indicator);
         container.scrollTop = container.scrollHeight;
@@ -354,38 +492,88 @@ class ZenithApp {
         switch (data.type) {
             case 'chat_response':
                 this.hideTypingIndicator();
-                this.addMessage('assistant', data.content);
+                this.addMessage('assistant', data.content, {
+                    tool_calls: data.tool_calls || 0,
+                    tokens_used: data.tokens_used || 0,
+                    tokens_in: data.prompt_tokens || 0,
+                    tokens_out: data.completion_tokens || 0,
+                });
+                // Narrator summary
+                if (data.tool_calls > 0) {
+                    this.addNarratorEntry(`Response generated using ${data.tool_calls} tool${data.tool_calls > 1 ? 's' : ''}`, '✅');
+                }
+                // Browser notification
+                const preview = data.content.substring(0, 100).replace(/\n/g, ' ');
+                this.sendNotification('Zenith-OS', preview, '⚡');
                 break;
 
             case 'thinking':
-                // Could show thinking state
+                this.addNarratorEntry('Thinking and planning...', '🧠');
+                this.updateTypingText('Thinking...');
                 break;
 
             case 'action':
-                // Show tool execution
-                console.log('Action:', data.content);
+                // Narrator: show which tool is being used
+                const toolName = data.content || 'tool';
+                const toolIcons = {
+                    'search': '🔍', 'fetch': '🌐', 'read_file': '📄', 'write_file': '✏️',
+                    'run_command': '💻', 'browse': '🌍', 'recall': '🧠', 'calendar': '📅',
+                    'goals': '🎯', 'reminders': '⏰', 'pc_screenshot': '📸', 'analyze': '🔬',
+                    'memory': '🧠', 'browse_open': '🌍', 'browse_click': '👆', 'browse_fill': '⌨️',
+                    'browse_screenshot': '📸', 'browse_snapshot': '🔍', 'browse_get': '📥',
+                    'search': '🔍', 'fetch': '🌐', 'scrape': '🕷️', 'pc_click': '🖱️',
+                    'pc_fill': '⌨️', 'pc_press': '🔘',
+                };
+                const icon = toolIcons[toolName] || '⚙️';
+                this.addNarratorEntry(`Using ${toolName}`, icon);
+                this.updateTypingText(`Using ${toolName}...`);
                 break;
 
             case 'observation':
-                // Show tool result
-                console.log('Observation:', data.content);
+                // Narrator: show tool result summary
+                const obsPreview = (data.content || '').substring(0, 80).replace(/\n/g, ' ');
+                this.addNarratorEntry(`Got result: ${obsPreview}${obsPreview.length >= 80 ? '...' : ''}`, '📥');
                 break;
 
             case 'error':
                 this.hideTypingIndicator();
                 this.addMessage('assistant', `Error: ${data.content}`);
+                this.addNarratorEntry(`Error occurred: ${data.content.substring(0, 60)}`, '❌');
+                this.sendNotification('Zenith-OS - Error', data.content.substring(0, 100), '❌');
                 break;
 
             case 'research_result':
                 this.displayResearchResults(data.content);
+                this.addNarratorEntry('Research completed', '🔬');
+                this.sendNotification('Zenith-OS', 'Research completed!', '🔬');
                 break;
 
             case 'dream_result':
                 this.displayDreamResult(data.content);
+                this.addNarratorEntry('Dream cycle completed', '🌙');
+                break;
+
+            case 'reminder':
+                // Reminder notification
+                const reminder = data.content || {};
+                this.addNarratorEntry(`⏰ Reminder: ${reminder.title || 'Unknown'}`, '⏰');
+                this.sendNotification(`⏰ Reminder: ${reminder.title || ''}`, reminder.description || reminder.title || '', '⏰');
+                // Show in chat as a system message
+                this.addMessage('assistant', `⏰ **Reminder:** ${reminder.title}\n${reminder.description || ''}\n_Scheduled: ${reminder.datetime || 'now'}_`);
                 break;
 
             default:
                 console.log('Unknown message type:', data.type);
+        }
+    }
+
+    updateTypingText(text) {
+        const indicator = document.getElementById('typingIndicator');
+        if (indicator) {
+            const textSpan = indicator.querySelector('.typing-text');
+            if (textSpan) {
+                textSpan.textContent = text;
+            }
         }
     }
 
@@ -521,6 +709,97 @@ class ZenithApp {
             });
     }
 
+    // ===== Diagnosis =====
+    async runDiagnosis() {
+        const issuesDiv = document.getElementById('diagnosisIssues');
+        const statsDiv = document.getElementById('diagnosisStats');
+        const healthCircle = document.querySelector('.health-value');
+
+        issuesDiv.innerHTML = '<div class="placeholder-text">Running diagnostics...</div>';
+
+        try {
+            const res = await fetch('/api/diagnosis');
+            const data = await res.json();
+
+            // Update health score
+            const score = data.health_score || 0;
+            healthCircle.textContent = score;
+            healthCircle.className = 'health-value';
+            if (score >= 80) healthCircle.classList.add('health-good');
+            else if (score >= 50) healthCircle.classList.add('health-warning');
+            else healthCircle.classList.add('health-critical');
+
+            // Update stats
+            let statsHtml = '';
+            if (data.stats) {
+                Object.entries(data.stats).forEach(([key, value]) => {
+                    statsHtml += `<div class="stat-item"><span class="stat-key">${key}</span><span class="stat-val">${value}</span></div>`;
+                });
+            }
+            statsDiv.innerHTML = statsHtml;
+
+            // Update issues
+            if (!data.issues || data.issues.length === 0) {
+                issuesDiv.innerHTML = '<div class="placeholder-text">✅ No issues detected!</div>';
+                return;
+            }
+
+            let html = '';
+            const icons = { critical: '🔴', error: '🟠', warning: '🟡', info: '🔵' };
+            data.issues.forEach(issue => {
+                const icon = icons[issue.severity] || '⚪';
+                const fixBadge = issue.auto_fixable ? '<span class="fix-badge">auto-fix</span>' : '';
+                html += `
+                    <div class="issue-card issue-${issue.severity}">
+                        <div class="issue-header">
+                            <span>${icon} ${issue.title}</span>
+                            ${fixBadge}
+                        </div>
+                        <div class="issue-desc">${issue.description}</div>
+                        <div class="issue-category">${issue.category}</div>
+                    </div>
+                `;
+            });
+            issuesDiv.innerHTML = html;
+
+        } catch (err) {
+            issuesDiv.innerHTML = `<div class="placeholder-text">Error: ${err.message}</div>`;
+        }
+    }
+
+    async runAutoFix() {
+        const issuesDiv = document.getElementById('diagnosisIssues');
+        issuesDiv.innerHTML = '<div class="placeholder-text">Running auto-fix...</div>';
+
+        try {
+            const res = await fetch('/api/diagnosis/fix', { method: 'POST' });
+            const data = await res.json();
+
+            let html = `<div class="fix-result">`;
+            html += `<p>Health Score: ${data.health_score}/100</p>`;
+            html += `<p>Issues Found: ${data.issues_found}</p>`;
+
+            if (data.fixes_applied && data.fixes_applied.length > 0) {
+                html += `<h4>Fixes Applied:</h4><ul>`;
+                data.fixes_applied.forEach(fix => {
+                    html += `<li>✅ ${fix}</li>`;
+                });
+                html += `</ul>`;
+            } else {
+                html += `<p>No auto-fixable issues found.</p>`;
+            }
+
+            html += `</div>`;
+            issuesDiv.innerHTML = html;
+
+            // Re-run diagnosis to show updated state
+            setTimeout(() => this.runDiagnosis(), 1000);
+
+        } catch (err) {
+            issuesDiv.innerHTML = `<div class="placeholder-text">Error: ${err.message}</div>`;
+        }
+    }
+
     // ===== Tools =====
     loadTools() {
         fetch('/api/tools')
@@ -531,12 +810,14 @@ class ZenithApp {
                     'File Operations': ['read_file', 'write_file', 'edit_file', 'delete_file', 'list_dir', 'glob_search', 'grep_search'],
                     'Shell': ['run_command', 'check_background'],
                     'Web': ['search', 'fetch', 'scrape'],
-                    'Browser': ['browse_open', 'browse_snapshot', 'browse_click', 'browse_fill', 'browse_get', 'browse_screenshot'],
-                    'PC Control': ['pc_get_windows', 'pc_get_ui_tree', 'pc_click', 'pc_fill', 'pc_press', 'pc_screenshot'],
-                    'Memory': ['recall', 'store_memory'],
+                    'Browser': ['browse_open', 'browse_snapshot', 'browse_click', 'browse_fill', 'browse_get', 'browse_screenshot', 'browse_scroll', 'browse_hover', 'browse_keypress'],
+                    'PC Control': ['pc_get_windows', 'pc_get_ui_tree', 'pc_click', 'pc_fill', 'pc_press', 'pc_screenshot', 'pc_launch', 'pc_focus'],
+                    'Memory': ['recall', 'store_memory', 'search_memory'],
                     'Productivity': ['calendar', 'goals', 'reminders', 'spreadsheet', 'parse_document'],
                     'Science': ['science_research', 'analyze_molecule', 'check_battery_claim', 'check_fusion_lawson', 'compute_debye_length'],
-                    'Subagent': ['dispatch_agent', 'dispatch_parallel'],
+                    'Subagent': ['dispatch_agent', 'dispatch_parallel', 'swarm'],
+                    'Workflows': ['workflow_create', 'workflow_execute', 'workflow_list'],
+                    'Notifications': ['reminders_create', 'reminders_list', 'reminders_dismiss', 'reminders_recurring'],
                     'System': ['get_time', 'get_weather', 'create_tool', 'delete_dynamic_tool', 'load_skill']
                 };
 
@@ -544,12 +825,14 @@ class ZenithApp {
                     'File Operations': '📁',
                     'Shell': '💻',
                     'Web': '🌐',
-                    'Browser': '🔍',
+                    'Browser': '🌍',
                     'PC Control': '🖥️',
                     'Memory': '🧠',
                     'Productivity': '📅',
                     'Science': '🔬',
                     'Subagent': '🤖',
+                    'Workflows': '⚡',
+                    'Notifications': '🔔',
                     'System': '⚙️'
                 };
 
@@ -568,6 +851,58 @@ class ZenithApp {
             .catch(err => {
                 console.error('Failed to load tools:', err);
             });
+    }
+
+    // ===== Narrator (Activity Log) =====
+    addNarratorEntry(text, icon = '⚙️') {
+        const container = document.getElementById('chatMessages');
+        const entry = document.createElement('div');
+        entry.className = 'narrator-entry';
+        entry.innerHTML = `
+            <span class="narrator-icon">${icon}</span>
+            <span class="narrator-text">${text}</span>
+            <span class="narrator-time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+        `;
+        container.appendChild(entry);
+        container.scrollTop = container.scrollHeight;
+
+        // Store in activity log
+        this.activityLog.push({ text, icon, timestamp: Date.now() });
+    }
+
+    // ===== Browser Notifications =====
+    requestNotificationPermission() {
+        if ('Notification' in window) {
+            Notification.requestPermission().then(permission => {
+                this.notificationPermission = permission === 'granted';
+            });
+        }
+    }
+
+    sendNotification(title, body, icon = '⚡') {
+        if (!this.notificationPermission) return;
+        if (document.hasFocus()) return; // Don't notify if user is looking
+
+        try {
+            const notif = new Notification(title, {
+                body: body.substring(0, 200),
+                icon: '/static/favicon.ico',
+                badge: '/static/favicon.ico',
+                tag: 'zenith-response',
+                requireInteraction: false,
+                silent: false,
+            });
+
+            notif.onclick = () => {
+                window.focus();
+                notif.close();
+            };
+
+            // Auto-close after 5 seconds
+            setTimeout(() => notif.close(), 5000);
+        } catch (e) {
+            console.log('Notification failed:', e);
+        }
     }
 
     // ===== Dream Mode =====
@@ -631,6 +966,110 @@ class ZenithApp {
 
         // Update stats
         this.loadDreamStats();
+    }
+
+    // ===== Reminders =====
+    async loadReminders() {
+        const listDiv = document.getElementById('remindersList');
+        try {
+            const res = await fetch('/api/reminders');
+            const data = await res.json();
+
+            if (!data.reminders || data.reminders.length === 0) {
+                listDiv.innerHTML = '<div class="reminder-empty">🔔 No upcoming reminders. Create one above!</div>';
+                return;
+            }
+
+            let html = '';
+            data.reminders.forEach(r => {
+                const icon = r.recurrence ? '🔄' : '⏰';
+                html += `
+                    <div class="reminder-card">
+                        <div class="reminder-icon">${icon}</div>
+                        <div class="reminder-info">
+                            <div class="reminder-title">${r.title || 'Untitled'}</div>
+                            ${r.description ? `<div class="reminder-desc">${r.description}</div>` : ''}
+                            <div class="reminder-time">📅 ${r.datetime || 'No time set'}${r.recurrence ? ` (${r.recurrence})` : ''}</div>
+                        </div>
+                        <div class="reminder-actions">
+                            <button class="neu-btn" onclick="window.zenithApp.dismissReminder('${r.id}')">Done</button>
+                            <button class="neu-btn" onclick="window.zenithApp.deleteReminder('${r.id}')">Delete</button>
+                        </div>
+                    </div>
+                `;
+            });
+            listDiv.innerHTML = html;
+        } catch (err) {
+            listDiv.innerHTML = '<div class="reminder-empty">Error loading reminders</div>';
+        }
+    }
+
+    async createReminder() {
+        const title = document.getElementById('reminderTitle').value.trim();
+        const desc = document.getElementById('reminderDesc').value.trim();
+        const timeInput = document.getElementById('reminderTime').value;
+
+        if (!title) {
+            alert('Please enter a reminder title');
+            return;
+        }
+
+        let datetime = timeInput;
+        if (!datetime) {
+            // Default to 5 minutes from now
+            const d = new Date(Date.now() + 5 * 60000);
+            datetime = d.toISOString().slice(0, 16);
+        }
+
+        // Convert from datetime-local format to "YYYY-MM-DD HH:MM"
+        const formatted = datetime.replace('T', ' ');
+
+        try {
+            const res = await fetch('/api/reminders/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, datetime: formatted, description: desc })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                document.getElementById('reminderTitle').value = '';
+                document.getElementById('reminderDesc').value = '';
+                document.getElementById('reminderTime').value = '';
+                this.addNarratorEntry(`Reminder created: ${title}`, '🔔');
+                this.loadReminders();
+            } else {
+                alert('Failed to create reminder: ' + (data.error || 'Unknown error'));
+            }
+        } catch (err) {
+            alert('Error creating reminder: ' + err.message);
+        }
+    }
+
+    async dismissReminder(id) {
+        try {
+            await fetch('/api/reminders/dismiss', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reminder_id: id })
+            });
+            this.loadReminders();
+        } catch (err) {
+            console.error('Failed to dismiss reminder:', err);
+        }
+    }
+
+    async deleteReminder(id) {
+        try {
+            await fetch('/api/reminders/dismiss', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reminder_id: id })
+            });
+            this.loadReminders();
+        } catch (err) {
+            console.error('Failed to delete reminder:', err);
+        }
     }
 
     // ===== Settings =====
