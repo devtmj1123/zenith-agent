@@ -279,6 +279,13 @@ class ZenithApp {
             this.startResearch();
         });
 
+        // Memory search
+        document.getElementById('memorySearch')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                this.searchMemories();
+            }
+        });
+
         // Reminders
         document.getElementById('createReminderBtn')?.addEventListener('click', () => {
             this.createReminder();
@@ -656,6 +663,46 @@ class ZenithApp {
         this.loadMemories();
     }
 
+    searchMemories() {
+        const query = document.getElementById('memorySearch').value.trim();
+        if (!query) {
+            this.loadMemories();
+            return;
+        }
+
+        const listDiv = document.getElementById('memoryList');
+        listDiv.innerHTML = '<div class="placeholder-text">Searching...</div>';
+
+        fetch('/api/memory/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.memories || data.memories.length === 0) {
+                listDiv.innerHTML = '<div class="placeholder-text">No matching memories found.</div>';
+                return;
+            }
+
+            let html = '';
+            data.memories.forEach(mem => {
+                const score = mem.combined_score ? ` (${(mem.combined_score * 100).toFixed(0)}%)` : '';
+                const ts = mem.created_at ? new Date(mem.created_at * 1000).toLocaleString() : '';
+                html += `
+                    <div class="memory-item">
+                        <div class="memory-content">${mem.content || ''}</div>
+                        <div class="memory-time">${ts}${score}</div>
+                    </div>
+                `;
+            });
+            listDiv.innerHTML = html;
+        })
+        .catch(err => {
+            listDiv.innerHTML = '<div class="placeholder-text">Search failed.</div>';
+        });
+    }
+
     // ===== Animated Counter =====
     animateCounter(elementId, target) {
         const el = document.getElementById(elementId);
@@ -806,46 +853,109 @@ class ZenithApp {
             .then(res => res.json())
             .then(data => {
                 const grid = document.getElementById('toolsGrid');
-                const toolCategories = {
-                    'File Operations': ['read_file', 'write_file', 'edit_file', 'delete_file', 'list_dir', 'glob_search', 'grep_search'],
-                    'Shell': ['run_command', 'check_background'],
-                    'Web': ['search', 'fetch', 'scrape'],
-                    'Browser': ['browse_open', 'browse_snapshot', 'browse_click', 'browse_fill', 'browse_get', 'browse_screenshot', 'browse_scroll', 'browse_hover', 'browse_keypress'],
-                    'PC Control': ['pc_get_windows', 'pc_get_ui_tree', 'pc_click', 'pc_fill', 'pc_press', 'pc_screenshot', 'pc_launch', 'pc_focus'],
-                    'Memory': ['recall', 'store_memory', 'search_memory'],
-                    'Productivity': ['calendar', 'goals', 'reminders', 'spreadsheet', 'parse_document'],
-                    'Science': ['science_research', 'analyze_molecule', 'check_battery_claim', 'check_fusion_lawson', 'compute_debye_length'],
-                    'Subagent': ['dispatch_agent', 'dispatch_parallel', 'swarm'],
-                    'Workflows': ['workflow_create', 'workflow_execute', 'workflow_list'],
-                    'Notifications': ['reminders_create', 'reminders_list', 'reminders_dismiss', 'reminders_recurring'],
-                    'System': ['get_time', 'get_weather', 'create_tool', 'delete_dynamic_tool', 'load_skill']
+
+                // Categorize tools
+                const categories = {
+                    'File Operations': { icon: '📁', tools: [] },
+                    'Shell': { icon: '💻', tools: [] },
+                    'Web': { icon: '🌐', tools: [] },
+                    'Browser': { icon: '🌍', tools: [] },
+                    'PC Control': { icon: '🖥️', tools: [] },
+                    'Memory': { icon: '🧠', tools: [] },
+                    'Productivity': { icon: '📅', tools: [] },
+                    'Science': { icon: '🔬', tools: [] },
+                    'Subagent': { icon: '🤖', tools: [] },
+                    'System': { icon: '⚙️', tools: [] },
+                    'Dynamic': { icon: '⚡', tools: [] },
                 };
 
-                const icons = {
-                    'File Operations': '📁',
-                    'Shell': '💻',
-                    'Web': '🌐',
-                    'Browser': '🌍',
-                    'PC Control': '🖥️',
-                    'Memory': '🧠',
-                    'Productivity': '📅',
-                    'Science': '🔬',
-                    'Subagent': '🤖',
-                    'Workflows': '⚡',
-                    'Notifications': '🔔',
-                    'System': '⚙️'
+                const categoryMap = {
+                    'read_file': 'File Operations', 'write_file': 'File Operations',
+                    'edit_file': 'File Operations', 'delete_file': 'File Operations',
+                    'list_dir': 'File Operations', 'glob_search': 'File Operations',
+                    'grep_search': 'File Operations',
+                    'run_command': 'Shell', 'check_background': 'Shell',
+                    'search': 'Web', 'fetch': 'Web', 'scrape': 'Web',
+                    'browse_open': 'Browser', 'browse_snapshot': 'Browser',
+                    'browse_click': 'Browser', 'browse_fill': 'Browser',
+                    'browse_get': 'Browser', 'browse_screenshot': 'Browser',
+                    'browse_eval': 'Browser', 'browse_wait': 'Browser',
+                    'browse_scroll': 'Browser', 'browse_scroll_to': 'Browser',
+                    'browse_hover': 'Browser', 'browse_right_click': 'Browser',
+                    'browse_double_click': 'Browser', 'browse_select': 'Browser',
+                    'browse_keypress': 'Browser', 'browse_drag': 'Browser',
+                    'browse_focus': 'Browser', 'browse_highlight': 'Browser',
+                    'browse_get_links': 'Browser', 'browse_get_forms': 'Browser',
+                    'browse_back': 'Browser', 'browse_forward': 'Browser',
+                    'browse_refresh': 'Browser', 'browse_skills': 'Browser',
+                    'pc_get_windows': 'PC Control', 'pc_get_ui_tree': 'PC Control',
+                    'pc_click': 'PC Control', 'pc_fill': 'PC Control',
+                    'pc_press': 'PC Control', 'pc_screenshot': 'PC Control',
+                    'pc_launch': 'PC Control', 'pc_focus': 'PC Control',
+                    'recall': 'Memory', 'store_memory': 'Memory',
+                    'calendar': 'Productivity', 'goals': 'Productivity',
+                    'reminders': 'Productivity', 'spreadsheet': 'Productivity',
+                    'parse_document': 'Productivity',
+                    'science_research': 'Science', 'analyze_molecule': 'Science',
+                    'check_battery_claim': 'Science', 'check_fusion_lawson': 'Science',
+                    'compute_debye_length': 'Science',
+                    'dispatch_agent': 'Subagent', 'dispatch_parallel': 'Subagent',
+                    'get_time': 'System', 'get_weather': 'System',
+                    'create_tool': 'System', 'delete_dynamic_tool': 'System',
+                    'load_skill': 'System',
                 };
 
-                let html = '';
-                Object.entries(toolCategories).forEach(([category, tools]) => {
-                    html += `
-                        <div class="tool-card">
-                            <div class="tool-icon">${icons[category] || '🔧'}</div>
-                            <h4>${category}</h4>
-                            <p>${tools.length} tools</p>
-                        </div>
-                    `;
+                // Sort built-in tools into categories
+                (data.builtin || []).forEach(tool => {
+                    const cat = categoryMap[tool.name] || 'System';
+                    if (categories[cat]) {
+                        categories[cat].tools.push(tool);
+                    }
                 });
+
+                // Add dynamic tools
+                (data.dynamic || []).forEach(tool => {
+                    categories['Dynamic'].tools.push(tool);
+                });
+
+                // Update total count
+                const totalEl = document.querySelector('#tab-tools .content-header p');
+                if (totalEl) {
+                    totalEl.textContent = `${data.total || 0} registered tools across ${Object.keys(categories).length} categories`;
+                }
+
+                // Render
+                let html = '';
+                Object.entries(categories).forEach(([category, info]) => {
+                    if (info.tools.length === 0) return;
+
+                    html += `
+                        <div class="tool-category">
+                            <div class="tool-category-header">
+                                <span class="tool-category-icon">${info.icon}</span>
+                                <h4>${category}</h4>
+                                <span class="tool-category-count">${info.tools.length}</span>
+                            </div>
+                            <div class="tool-category-list">
+                    `;
+
+                    info.tools.forEach(tool => {
+                        const desc = tool.description || 'No description';
+                        const typeBadge = tool.type === 'dynamic'
+                            ? '<span class="tool-badge dynamic">dynamic</span>'
+                            : '';
+                        html += `
+                            <div class="tool-item">
+                                <span class="tool-name">${tool.name}</span>
+                                ${typeBadge}
+                                <span class="tool-desc">${desc}</span>
+                            </div>
+                        `;
+                    });
+
+                    html += `</div></div>`;
+                });
+
                 grid.innerHTML = html;
             })
             .catch(err => {

@@ -304,6 +304,139 @@
     timeout: "number"
   risk_level: low
 
+- token: "ACT:BROWSE_SCROLL"
+  patterns: ["\\bscroll page\\b", "\\bscroll down\\b", "\\bscroll up\\b", "\\bscroll left\\b", "\\bscroll right\\b"]
+  target: browse
+  description: "Scroll the page in a direction. params: {direction (up/down/left/right), amount?, session?}"
+  params_schema:
+    direction: "string"
+    amount: "number"
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_SCROLL_TO"
+  patterns: ["\\bscroll to\\b", "\\bscroll to element\\b"]
+  target: browse
+  description: "Scroll to a specific element. params: {selector, session?}"
+  params_schema:
+    selector: "string"
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_HOVER"
+  patterns: ["\\bhover\\b", "\\bhover over\\b", "\\bmouse over\\b"]
+  target: browse
+  description: "Hover over an element (for dropdowns, tooltips). params: {selector, session?}"
+  params_schema:
+    selector: "string"
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_RIGHT_CLICK"
+  patterns: ["\\bright click\\b", "\\bcontext menu\\b", "\\bright-click\\b"]
+  target: browse
+  description: "Right-click an element for context menu. params: {selector, session?}"
+  params_schema:
+    selector: "string"
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_DOUBLE_CLICK"
+  patterns: ["\\bdouble click\\b", "\\bdouble-click\\b", "\\bdblclick\\b"]
+  target: browse
+  description: "Double-click an element. params: {selector, session?}"
+  params_schema:
+    selector: "string"
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_SELECT"
+  patterns: ["\\bselect option\\b", "\\bchoose option\\b", "\\bdropdown select\\b"]
+  target: browse
+  description: "Select a value in a dropdown. params: {selector, value, session?}"
+  params_schema:
+    selector: "string"
+    value: "string"
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_KEYPRESS"
+  patterns: ["\\bpress key\\b", "\\bkeyboard shortcut\\b", "\\bhotkey\\b", "\\bkey press\\b"]
+  target: browse
+  description: "Press keyboard keys or shortcuts (e.g. 'Ctrl+c', 'Enter'). params: {keys, session?}"
+  params_schema:
+    keys: "string"
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_DRAG"
+  patterns: ["\\bdrag\\b", "\\bdrag and drop\\b", "\\bdrop\\b"]
+  target: browse
+  description: "Drag from one element to another. params: {from_selector, to_selector, session?}"
+  params_schema:
+    from_selector: "string"
+    to_selector: "string"
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_FOCUS"
+  patterns: ["\\bfocus element\\b", "\\bfocus on\\b"]
+  target: browse
+  description: "Focus an element. params: {selector, session?}"
+  params_schema:
+    selector: "string"
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_HIGHLIGHT"
+  patterns: ["\\bhighlight\\b", "\\bhighlight element\\b"]
+  target: browse
+  description: "Highlight an element with a red border. params: {selector, session?}"
+  params_schema:
+    selector: "string"
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_GET_LINKS"
+  patterns: ["\\bget links\\b", "\\blist links\\b", "\\bextract links\\b"]
+  target: browse
+  description: "Get all links on the page. params: {session?}"
+  params_schema:
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_GET_FORMS"
+  patterns: ["\\bget forms\\b", "\\blist forms\\b", "\\bextract forms\\b"]
+  target: browse
+  description: "Get all forms on the page. params: {session?}"
+  params_schema:
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_BACK"
+  patterns: ["\\bgo back\\b", "\\bbrowser back\\b", "\\bnav back\\b"]
+  target: browse
+  description: "Navigate back in browser history. params: {session?}"
+  params_schema:
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_FORWARD"
+  patterns: ["\\bgo forward\\b", "\\bbrowser forward\\b", "\\bnav forward\\b"]
+  target: browse
+  description: "Navigate forward in browser history. params: {session?}"
+  params_schema:
+    session: "string"
+  risk_level: low
+
+- token: "ACT:BROWSE_REFRESH"
+  patterns: ["\\brefresh page\\b", "\\breload page\\b", "\\brefresh\\b"]
+  target: browse
+  description: "Refresh the current page. params: {session?}"
+  params_schema:
+    session: "string"
+  risk_level: low
+
 # ── Skills ────────────────────────────────────────────
 - token: "ACT:LOAD_SKILL"
   patterns: ["\\bload skill\\b", "\\bshow skill\\b", "\\bread skill\\b"]

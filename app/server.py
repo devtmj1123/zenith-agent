@@ -181,8 +181,19 @@ def api_memory_stats():
         agent = get_agent()
         desire_stats = agent.desire_engine.get_stats()
         assoc_stats = agent.association_engine.get_stats()
+
+        # Get actual memory count from SQLite
+        total_memories = 0
+        try:
+            from memory.soft_memory import SoftMemory
+            mem = SoftMemory()
+            memories = mem.list_all(limit=9999)
+            total_memories = len(memories)
+        except Exception:
+            pass
+
         return jsonify({
-            'total_memories': 0,
+            'total_memories': total_memories,
             'active_desires': desire_stats['active_desires'],
             'total_associations': assoc_stats['total_associations'],
             'dream_ready': desire_stats['dream_ready']
@@ -193,14 +204,72 @@ def api_memory_stats():
 
 @app.route('/api/memory/list')
 def api_memory_list():
-    return jsonify({'memories': []})
+    try:
+        from memory.soft_memory import SoftMemory
+        mem = SoftMemory()
+        memories = mem.list_all(limit=50)
+        return jsonify({'memories': memories})
+    except Exception as e:
+        return jsonify({'memories': [], 'error': str(e)})
+
+
+@app.route('/api/memory/search', methods=['POST'])
+def api_memory_search():
+    """Search memories via the API."""
+    try:
+        data = request.json or {}
+        query = data.get('query', '')
+        if not query:
+            return jsonify({'memories': []})
+        from memory.soft_memory import SoftMemory
+        mem = SoftMemory()
+        results = run_async(mem.recall(query, top_k=10))
+        return jsonify({'memories': results})
+    except Exception as e:
+        return jsonify({'memories': [], 'error': str(e)})
 
 
 @app.route('/api/tools')
 def api_tools():
+    """Return all tools — built-in + dynamic — with descriptions."""
     try:
         agent = get_agent()
-        return jsonify({'tools': agent._tools_schema})
+
+        # Built-in tools from BUILTIN_TOOLS
+        from tools.builtin import BUILTIN_TOOLS
+        builtin_tools = []
+        for name in sorted(BUILTIN_TOOLS.keys()):
+            fn = BUILTIN_TOOLS[name]
+            desc = (fn.__doc__ or '').strip().split('\n')[0] if fn.__doc__ else ''
+            builtin_tools.append({
+                'name': name,
+                'type': 'builtin',
+                'description': desc,
+            })
+
+        # Dynamic tools from registry
+        dynamic_tools = []
+        try:
+            from dynamic_tools.registry import DynamicToolRegistry
+            registry = DynamicToolRegistry()
+            for tool_info in registry.list_tools():
+                dynamic_tools.append({
+                    'name': tool_info['name'],
+                    'type': 'dynamic',
+                    'description': tool_info.get('description', ''),
+                })
+        except Exception:
+            pass
+
+        # Agent tools schema (for LLM function calling)
+        tools_schema = agent._tools_schema if hasattr(agent, '_tools_schema') else []
+
+        return jsonify({
+            'builtin': builtin_tools,
+            'dynamic': dynamic_tools,
+            'total': len(builtin_tools) + len(dynamic_tools),
+            'schema': tools_schema,
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
