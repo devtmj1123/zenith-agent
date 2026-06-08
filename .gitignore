@@ -23,6 +23,9 @@ ENV/
 *.swo
 *~
 
+# === Claude Code dev ===
+.claudecode/
+
 # === Zenith runtime data ===
 .zenith/
 *.db
@@ -43,6 +46,12 @@ htmlcov/
 .coverage
 .coverage.*
 coverage.xml
+tests/
+test_*.py
+*_test.py
+TEST_*.md
+scripts/test_*.py
+scripts/run_*.py
 
 # === Type checking ===
 .mypy_cache/
@@ -62,3 +71,20 @@ logs/
 *.so
 *.dll
 *.dylib
+*.spec
+*.msi
+*.exe
+
+# === Installer / build scripts ===
+installer/
+launch.bat
+zenith.bat
+analyze_aspirin.bat
+
+# === Dev docs ===
+docs/
+PROJECT.md
+REFACTOR_PLAN.md
+
+# === Old / duplicate files ===
+api/server_original.py

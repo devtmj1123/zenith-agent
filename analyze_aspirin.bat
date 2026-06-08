@@ -1,6 +1,0 @@
-@echo off
-echo Installing RDKit...
-pip install rdkit -q
-echo Running analysis...
-python tools\molecule_analysis.py "CC(=O)Oc1ccccc1C(=O)O"
-pause
