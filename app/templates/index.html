@@ -313,7 +313,7 @@
                 </div>
                 <div class="settings-panel">
                     <div class="settings-group">
-                        <h3>LLM Provider</h3>
+                        <h3>🤖 LLM Provider</h3>
                         <div class="setting-row">
                             <label>Provider</label>
                             <select class="neu-select" id="settingProvider">
@@ -321,6 +321,8 @@
                                 <option value="groq">Groq</option>
                                 <option value="ollama">Ollama (Local)</option>
                                 <option value="nvidia">NVIDIA NIM</option>
+                                <option value="anthropic">Anthropic</option>
+                                <option value="mimo">Mimo</option>
                             </select>
                         </div>
                         <div class="setting-row">
@@ -333,7 +335,7 @@
                         </div>
                     </div>
                     <div class="settings-group">
-                        <h3>Agent Behavior</h3>
+                        <h3>🧠 Agent Behavior</h3>
                         <div class="setting-row">
                             <label>Max Iterations</label>
                             <input type="number" class="neu-input" id="settingMaxIter" value="30">
@@ -351,7 +353,14 @@
                         </div>
                     </div>
                     <div class="settings-group">
-                        <h3>Interface</h3>
+                        <h3>📱 Integrations</h3>
+                        <div class="setting-row">
+                            <label>Telegram Bot Token</label>
+                            <input type="password" class="neu-input" id="settingTelegramToken" placeholder="123456:ABC-DEF...">
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <h3>🎨 Interface</h3>
                         <div class="setting-row">
                             <label>Theme</label>
                             <select class="neu-select" id="settingTheme">

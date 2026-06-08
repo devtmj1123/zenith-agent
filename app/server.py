@@ -394,10 +394,79 @@ def api_dream_start():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/settings', methods=['GET'])
+def api_settings_get():
+    """Read current settings from .env and config."""
+    env_path = _root / ".env"
+    settings = {}
+
+    # Read .env file
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, _, val = line.partition("=")
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                # Mask API keys
+                if "key" in key.lower() or "token" in key.lower() or "secret" in key.lower():
+                    if val and len(val) > 8:
+                        val = val[:4] + "..." + val[-4:]
+                settings[key] = val
+
+    # Read config settings
+    try:
+        from config.settings import Settings
+        cfg = Settings()
+        cfg.load_from_env()
+        settings.update({
+            'MAX_ITERATIONS': str(getattr(cfg, 'max_iterations', 30)),
+            'TOKEN_BUDGET': str(getattr(cfg, 'token_budget', 100000)),
+            'LLM_PROVIDER': getattr(cfg, 'provider', 'openai'),
+            'LLM_MODEL': getattr(cfg, 'model', 'gpt-4'),
+        })
+    except Exception:
+        pass
+
+    return jsonify({'settings': settings})
+
+
 @app.route('/api/settings', methods=['POST'])
-def api_settings():
-    data = request.json
-    return jsonify({'status': 'ok'})
+def api_settings_post():
+    """Save settings to .env file."""
+    data = request.json or {}
+    env_path = _root / ".env"
+
+    # Read existing .env
+    existing = {}
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, _, val = line.partition("=")
+                existing[key.strip()] = val.strip()
+
+    # Update with new values
+    key_map = {
+        'provider': 'LLM_PROVIDER',
+        'apiKey': 'LLM_API_KEY',
+        'model': 'LLM_MODEL',
+        'maxIterations': 'MAX_ITERATIONS',
+        'tokenBudget': 'TOKEN_BUDGET',
+        'telegramToken': 'TELEGRAM_BOT_TOKEN',
+        'dreamMode': 'DREAM_MODE',
+    }
+
+    for frontend_key, env_key in key_map.items():
+        val = data.get(frontend_key, '')
+        if val:  # Don't overwrite with empty
+            existing[env_key] = str(val)
+
+    # Write back
+    lines = [f"{k}={v}" for k, v in existing.items()]
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    return jsonify({'success': True, 'message': 'Settings saved to .env'})
 
 
 @app.route('/api/diagnosis')
@@ -472,6 +541,14 @@ def api_dismiss_reminder():
 
 # ===== WebSocket =====
 
+def _ws_send(ws, data):
+    """Send JSON to WebSocket, silently ignore if closed."""
+    try:
+        ws.send(json.dumps(data))
+    except Exception:
+        pass
+
+
 @sock.route('/ws')
 def websocket(ws):
     """WebSocket for real-time chat.
@@ -486,20 +563,23 @@ def websocket(ws):
         agent = get_agent()
     except Exception as e:
         log.error(f"Agent init failed: {e}")
-        ws.send(json.dumps({
-            'type': 'error',
-            'content': f'Agent initialization failed: {str(e)[:200]}'
-        }))
+        _ws_send(ws, {'type': 'error', 'content': f'Agent initialization failed: {str(e)[:200]}'})
         # Keep connection alive so frontend can retry
         while True:
-            data = ws.receive()
+            try:
+                data = ws.receive()
+            except Exception:
+                break
             if not data:
                 break
-            msg = json.loads(data) if data else {}
+            try:
+                msg = json.loads(data)
+            except Exception:
+                continue
             if msg.get('type') == 'ping':
-                ws.send(json.dumps({'type': 'pong'}))
+                _ws_send(ws, {'type': 'pong'})
             elif msg.get('type') == 'status_request':
-                ws.send(json.dumps({'type': 'status', 'ready': False, 'error': str(e)[:200]}))
+                _ws_send(ws, {'type': 'status', 'ready': False, 'error': str(e)[:200]})
         _connected_ws_clients.discard(ws)
         return
 
@@ -507,20 +587,23 @@ def websocket(ws):
 
     try:
         while True:
-            data = ws.receive()
+            try:
+                data = ws.receive()
+            except Exception:
+                break
             if not data:
                 break
 
             try:
                 message = json.loads(data)
             except json.JSONDecodeError:
-                ws.send(json.dumps({'type': 'error', 'content': 'Invalid JSON'}))
+                _ws_send(ws, {'type': 'error', 'content': 'Invalid JSON'})
                 continue
 
             msg_type = message.get('type')
 
             if msg_type == 'ping':
-                ws.send(json.dumps({'type': 'pong'}))
+                _ws_send(ws, {'type': 'pong'})
                 continue
 
             if msg_type == 'chat':
@@ -529,20 +612,18 @@ def websocket(ws):
                     continue
 
                 try:
-                    # Run agent synchronously in this thread
                     state = run_async(agent.run(content, session_id=session_id))
-                    ws.send(json.dumps({
+                    _ws_send(ws, {
                         'type': 'chat_response',
                         'content': state.final_response or '',
                         'tool_calls': state.tool_calls_made,
-                        'tokens_used': state.tokens_used
-                    }))
+                        'tokens_used': state.tokens_used,
+                        'prompt_tokens': state.input_tokens,
+                        'completion_tokens': state.output_tokens,
+                    })
                 except Exception as e:
                     log.error(f"Chat error: {e}", exc_info=True)
-                    ws.send(json.dumps({
-                        'type': 'error',
-                        'content': str(e)
-                    }))
+                    _ws_send(ws, {'type': 'error', 'content': str(e)})
 
             elif msg_type == 'research':
                 query = message.get('query', '')
@@ -555,20 +636,14 @@ def websocket(ws):
                     if domain != 'auto':
                         prompt += f" (domain: {domain})"
                     state = run_async(agent.run(prompt, session_id="research"))
-                    ws.send(json.dumps({
-                        'type': 'chat_response',
-                        'content': state.final_response or ''
-                    }))
+                    _ws_send(ws, {'type': 'chat_response', 'content': state.final_response or ''})
                 except Exception as e:
-                    ws.send(json.dumps({
-                        'type': 'error',
-                        'content': str(e)
-                    }))
+                    _ws_send(ws, {'type': 'error', 'content': str(e)})
 
             elif msg_type == 'dream':
                 try:
                     result = run_async(agent.dream_controller.dream())
-                    ws.send(json.dumps({
+                    _ws_send(ws, {
                         'type': 'dream_result',
                         'content': {
                             'desires_pursued': result.desires_pursued,
@@ -576,12 +651,9 @@ def websocket(ws):
                             'novel_insights': result.novel_insights,
                             'duration_seconds': result.duration_seconds
                         }
-                    }))
+                    })
                 except Exception as e:
-                    ws.send(json.dumps({
-                        'type': 'error',
-                        'content': str(e)
-                    }))
+                    _ws_send(ws, {'type': 'error', 'content': str(e)})
 
     except Exception as e:
         log.error(f"WebSocket error: {e}", exc_info=True)

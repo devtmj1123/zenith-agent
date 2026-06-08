@@ -1320,25 +1320,28 @@ class ZenithApp {
 
     // ===== Settings =====
     loadSettings() {
-        const settings = JSON.parse(localStorage.getItem('zenith-settings') || '{}');
+        // Load from API (reads .env + config)
+        fetch('/api/settings')
+            .then(res => res.json())
+            .then(data => {
+                const s = data.settings || {};
+                if (s.LLM_PROVIDER) document.getElementById('settingProvider').value = s.LLM_PROVIDER.toLowerCase();
+                if (s.LLM_MODEL) document.getElementById('settingModel').value = s.LLM_MODEL;
+                if (s.MAX_ITERATIONS) document.getElementById('settingMaxIter').value = s.MAX_ITERATIONS;
+                if (s.TOKEN_BUDGET) document.getElementById('settingTokenBudget').value = s.TOKEN_BUDGET;
+                if (s.DREAM_MODE !== undefined) document.getElementById('settingDream').checked = s.DREAM_MODE === 'true' || s.DREAM_MODE === '1';
+                if (s.TELEGRAM_BOT_TOKEN) document.getElementById('settingTelegramToken').value = s.TELEGRAM_BOT_TOKEN;
+            })
+            .catch(() => {
+                // Fallback to localStorage
+                const settings = JSON.parse(localStorage.getItem('zenith-settings') || '{}');
+                if (settings.provider) document.getElementById('settingProvider').value = settings.provider;
+                if (settings.model) document.getElementById('settingModel').value = settings.model;
+                if (settings.maxIterations) document.getElementById('settingMaxIter').value = settings.maxIterations;
+                if (settings.tokenBudget) document.getElementById('settingTokenBudget').value = settings.tokenBudget;
+            });
 
-        if (settings.provider) {
-            document.getElementById('settingProvider').value = settings.provider;
-        }
-        if (settings.model) {
-            document.getElementById('settingModel').value = settings.model;
-        }
-        if (settings.maxIterations) {
-            document.getElementById('settingMaxIter').value = settings.maxIterations;
-        }
-        if (settings.tokenBudget) {
-            document.getElementById('settingTokenBudget').value = settings.tokenBudget;
-        }
-        if (settings.dreamMode !== undefined) {
-            document.getElementById('settingDream').checked = settings.dreamMode;
-        }
-
-        // Load theme
+        // Load theme from localStorage
         const theme = localStorage.getItem('zenith-theme') || 'light';
         document.getElementById('settingTheme').value = theme;
         document.documentElement.setAttribute('data-theme', theme);
@@ -1347,16 +1350,28 @@ class ZenithApp {
     saveSettings() {
         const settings = {
             provider: document.getElementById('settingProvider').value,
-            apiKey: document.getElementById('settingApiKey').value,
             model: document.getElementById('settingModel').value,
             maxIterations: parseInt(document.getElementById('settingMaxIter').value),
             tokenBudget: parseInt(document.getElementById('settingTokenBudget').value),
-            dreamMode: document.getElementById('settingDream').checked
+            dreamMode: document.getElementById('settingDream').checked,
+            telegramToken: document.getElementById('settingTelegramToken')?.value || '',
         };
 
+        // Save API key only if user typed a new one
+        const apiKey = document.getElementById('settingApiKey').value;
+        if (apiKey && !apiKey.includes('...')) {
+            settings.apiKey = apiKey;
+        }
+
+        // Save to localStorage
         localStorage.setItem('zenith-settings', JSON.stringify(settings));
 
-        // Send to backend
+        // Save theme
+        const theme = document.getElementById('settingTheme').value;
+        localStorage.setItem('zenith-theme', theme);
+        document.documentElement.setAttribute('data-theme', theme);
+
+        // Save to backend (.env)
         fetch('/api/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1364,10 +1379,12 @@ class ZenithApp {
         })
         .then(res => res.json())
         .then(data => {
-            alert('Settings saved!');
+            if (data.success) {
+                this.addNarratorEntry('Settings saved to .env', '⚙️');
+            }
         })
         .catch(err => {
-            alert('Settings saved locally. Backend update failed.');
+            console.error('Settings save failed:', err);
         });
     }
 }
