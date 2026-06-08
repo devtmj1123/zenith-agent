@@ -164,11 +164,57 @@
                             <div class="stat-label">Associations</div>
                         </div>
                     </div>
-                    <div class="memory-search">
-                        <input type="text" id="memorySearch" class="neu-input" placeholder="Search memories...">
+                    <div class="memory-actions">
+                        <input type="text" id="memorySearch" class="neu-input" placeholder="Search memories..." style="flex:1">
+                        <button class="neu-btn primary" id="addMemoryBtn">+ Add Memory</button>
                     </div>
                     <div class="memory-list" id="memoryList">
                         <div class="placeholder-text">Loading memories...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Memory Edit Modal -->
+            <div class="modal-overlay" id="memoryModal" style="display:none;">
+                <div class="modal">
+                    <div class="modal-header">
+                        <h3 id="memoryModalTitle">Edit Memory</h3>
+                        <button class="modal-close" id="memoryModalClose">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="memoryEditId">
+                        <label>Content</label>
+                        <textarea id="memoryEditContent" class="neu-input" rows="4" placeholder="Memory content..."></textarea>
+                        <label>Layer</label>
+                        <select id="memoryEditLayer" class="neu-select">
+                            <option value="episodic">Episodic</option>
+                            <option value="semantic">Semantic</option>
+                            <option value="procedural">Procedural</option>
+                        </select>
+                        <label>Confidence (0-1)</label>
+                        <input type="number" id="memoryEditConfidence" class="neu-input" value="0.8" min="0" max="1" step="0.1">
+                    </div>
+                    <div class="modal-footer">
+                        <button class="neu-btn" id="memoryModalCancel">Cancel</button>
+                        <button class="neu-btn primary" id="memoryModalSave">Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Confirm Delete Modal -->
+            <div class="modal-overlay" id="confirmModal" style="display:none;">
+                <div class="modal modal-sm">
+                    <div class="modal-header">
+                        <h3>Confirm Delete</h3>
+                        <button class="modal-close" onclick="document.getElementById('confirmModal').style.display='none'">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Are you sure you want to delete this memory?</p>
+                        <p class="modal-warning">This cannot be undone.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="neu-btn" onclick="document.getElementById('confirmModal').style.display='none'">Cancel</button>
+                        <button class="neu-btn danger" id="confirmDeleteBtn">Delete</button>
                     </div>
                 </div>
             </div>

@@ -57,30 +57,46 @@ def _next_occurrence(recurrence: str, from_date: str = "") -> str:
 
 def _check_reminders_loop():
     """Background loop that checks for due reminders and triggers notifications."""
+    _last_triggered = {}  # Track last trigger time per reminder ID
     while True:
         try:
             data = _load()
-            now = datetime.now().strftime("%Y-%m-%d %H:%M")
+            now = datetime.now()
+            now_str = now.strftime("%Y-%m-%d %H:%M")
             updated = False
 
             for r in data.get("reminders", []):
-                if r.get("status") == "pending" and r.get("datetime", "") <= now:
-                    # Trigger notification callbacks
-                    for callback in _reminder_callbacks:
-                        try:
-                            callback(r)
-                        except Exception:
-                            pass
+                if r.get("status") != "pending":
+                    continue
 
-                    # Mark as triggered so it doesn't re-fire
-                    if r.get("recurrence"):
-                        # Recurring: schedule next occurrence
-                        r["datetime"] = _next_occurrence(r["recurrence"], r["datetime"])
-                        # Keep as pending for next occurrence
-                    else:
-                        # Non-recurring: mark as triggered
-                        r["status"] = "triggered"
-                    updated = True
+                reminder_dt = r.get("datetime", "")
+                if reminder_dt > now_str:
+                    continue
+
+                # Prevent duplicate triggers within same minute
+                rid = r.get("id", "")
+                last_trigger = _last_triggered.get(rid, "")
+                if last_trigger == now_str:
+                    continue
+
+                # Trigger notification callbacks
+                for callback in _reminder_callbacks:
+                    try:
+                        callback(r)
+                    except Exception:
+                        pass
+
+                _last_triggered[rid] = now_str
+
+                # Mark as triggered so it doesn't re-fire
+                if r.get("recurrence"):
+                    # Recurring: schedule next occurrence
+                    r["datetime"] = _next_occurrence(r["recurrence"], r["datetime"])
+                    # Keep as pending for next occurrence
+                else:
+                    # Non-recurring: mark as triggered
+                    r["status"] = "triggered"
+                updated = True
 
             if updated:
                 _save(data)

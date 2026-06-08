@@ -19,6 +19,7 @@ class ZenithApp {
         this.initParticles();
         this.initRippleEffects();
         this.requestNotificationPermission();
+        this.loadChatHistory();
     }
 
     // ===== Loading Screen =====
@@ -286,6 +287,23 @@ class ZenithApp {
             }
         });
 
+        // Memory modal
+        document.getElementById('addMemoryBtn')?.addEventListener('click', () => this.openAddMemory());
+        document.getElementById('memoryModalClose')?.addEventListener('click', () => {
+            document.getElementById('memoryModal').style.display = 'none';
+        });
+        document.getElementById('memoryModalCancel')?.addEventListener('click', () => {
+            document.getElementById('memoryModal').style.display = 'none';
+        });
+        document.getElementById('memoryModalSave')?.addEventListener('click', () => this.saveMemory());
+
+        // Close modals on overlay click
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) overlay.style.display = 'none';
+            });
+        });
+
         // Reminders
         document.getElementById('createReminderBtn')?.addEventListener('click', () => {
             this.createReminder();
@@ -343,6 +361,28 @@ class ZenithApp {
     }
 
     // ===== Chat =====
+    async loadChatHistory() {
+        try {
+            const res = await fetch('/api/history');
+            const data = await res.json();
+            if (data.messages && data.messages.length > 0) {
+                // Clear welcome message
+                const welcome = document.querySelector('.welcome-message');
+                if (welcome) welcome.remove();
+
+                // Load history messages
+                data.messages.forEach(msg => {
+                    this.addMessage(msg.role, msg.content, {
+                        tool_calls: msg.tool_calls || 0,
+                        tokens_used: msg.tokens_used || 0,
+                    });
+                });
+            }
+        } catch (err) {
+            console.log('No chat history available');
+        }
+    }
+
     sendMessage() {
         const input = document.getElementById('chatInput');
         const message = input.value.trim();
@@ -647,7 +687,7 @@ class ZenithApp {
         resultsDiv.innerHTML = html;
     }
 
-    // ===== Memory =====
+    // ===== Memory CRUD =====
     loadMemoryStats() {
         fetch('/api/memory/stats')
             .then(res => res.json())
@@ -659,8 +699,18 @@ class ZenithApp {
             .catch(err => {
                 console.error('Failed to load memory stats:', err);
             });
-
         this.loadMemories();
+    }
+
+    loadMemories() {
+        fetch('/api/memory/list')
+            .then(res => res.json())
+            .then(data => {
+                this._renderMemories(data.memories || []);
+            })
+            .catch(err => {
+                console.error('Failed to load memories:', err);
+            });
     }
 
     searchMemories() {
@@ -669,10 +719,8 @@ class ZenithApp {
             this.loadMemories();
             return;
         }
-
         const listDiv = document.getElementById('memoryList');
         listDiv.innerHTML = '<div class="placeholder-text">Searching...</div>';
-
         fetch('/api/memory/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -680,80 +728,168 @@ class ZenithApp {
         })
         .then(res => res.json())
         .then(data => {
-            if (!data.memories || data.memories.length === 0) {
-                listDiv.innerHTML = '<div class="placeholder-text">No matching memories found.</div>';
-                return;
-            }
-
-            let html = '';
-            data.memories.forEach(mem => {
-                const score = mem.combined_score ? ` (${(mem.combined_score * 100).toFixed(0)}%)` : '';
-                const ts = mem.created_at ? new Date(mem.created_at * 1000).toLocaleString() : '';
-                html += `
-                    <div class="memory-item">
-                        <div class="memory-content">${mem.content || ''}</div>
-                        <div class="memory-time">${ts}${score}</div>
-                    </div>
-                `;
-            });
-            listDiv.innerHTML = html;
+            this._renderMemories(data.memories || [], true);
         })
         .catch(err => {
             listDiv.innerHTML = '<div class="placeholder-text">Search failed.</div>';
         });
     }
 
-    // ===== Animated Counter =====
-    animateCounter(elementId, target) {
-        const el = document.getElementById(elementId);
-        if (!el) return;
-
-        const start = parseInt(el.textContent) || 0;
-        const duration = 800;
-        const startTime = performance.now();
-
-        const update = (currentTime) => {
-            const elapsed = currentTime - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-
-            // Ease out cubic
-            const eased = 1 - Math.pow(1 - progress, 3);
-            const current = Math.round(start + (target - start) * eased);
-
-            el.textContent = current;
-
-            if (progress < 1) {
-                requestAnimationFrame(update);
-            }
-        };
-
-        requestAnimationFrame(update);
+    _renderMemories(memories, isSearch = false) {
+        const listDiv = document.getElementById('memoryList');
+        if (!memories || memories.length === 0) {
+            listDiv.innerHTML = '<div class="placeholder-text">No memories stored yet.</div>';
+            return;
+        }
+        let html = '';
+        memories.slice(0, 50).forEach(mem => {
+            const ts = mem.created_at ? new Date(mem.created_at * 1000).toLocaleString() : '';
+            const score = mem.combined_score ? ` · match ${(mem.combined_score * 100).toFixed(0)}%` : '';
+            const layer = mem.layer ? `<span class="memory-layer">${mem.layer}</span>` : '';
+            const content = this.formatMessage(mem.content || mem.summary || '');
+            html += `
+                <div class="memory-item" data-id="${mem.id}">
+                    <div class="memory-content">${content}</div>
+                    <div class="memory-time">${ts}${layer}${score}</div>
+                    <div class="memory-actions-row">
+                        <button onclick="window.zenithApp.openEditMemory('${mem.id}', \`${(mem.content || '').replace(/`/g, '\\`').replace(/\\/g, '\\\\')}\`, '${mem.layer || 'episodic'}', ${mem.confidence || 0.8})">Edit</button>
+                        <button class="delete-btn" onclick="window.zenithApp.confirmDeleteMemory('${mem.id}')">Delete</button>
+                    </div>
+                </div>
+            `;
+        });
+        listDiv.innerHTML = html;
     }
 
-    loadMemories() {
-        fetch('/api/memory/list')
+    // Modal: Open for new memory
+    openAddMemory() {
+        document.getElementById('memoryModalTitle').textContent = 'Add Memory';
+        document.getElementById('memoryEditId').value = '';
+        document.getElementById('memoryEditContent').value = '';
+        document.getElementById('memoryEditLayer').value = 'episodic';
+        document.getElementById('memoryEditConfidence').value = '0.8';
+        document.getElementById('memoryModal').style.display = 'flex';
+    }
+
+    // Modal: Open for edit
+    openEditMemory(id, content, layer, confidence) {
+        document.getElementById('memoryModalTitle').textContent = 'Edit Memory';
+        document.getElementById('memoryEditId').value = id;
+        document.getElementById('memoryEditContent').value = content;
+        document.getElementById('memoryEditLayer').value = layer || 'episodic';
+        document.getElementById('memoryEditConfidence').value = confidence || 0.8;
+        document.getElementById('memoryModal').style.display = 'flex';
+    }
+
+    // Modal: Save (create or update)
+    async saveMemory() {
+        const id = document.getElementById('memoryEditId').value;
+        const content = document.getElementById('memoryEditContent').value.trim();
+        const layer = document.getElementById('memoryEditLayer').value;
+        const confidence = parseFloat(document.getElementById('memoryEditConfidence').value) || 0.8;
+
+        if (!content) {
+            alert('Content cannot be empty');
+            return;
+        }
+
+        try {
+            if (id) {
+                // Update
+                await fetch('/api/memory/edit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, content })
+                });
+            } else {
+                // Create
+                await fetch('/api/memory/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, layer, confidence })
+                });
+            }
+            document.getElementById('memoryModal').style.display = 'none';
+            this.loadMemories();
+            this.loadMemoryStats();
+        } catch (err) {
+            alert('Error saving memory: ' + err.message);
+        }
+    }
+
+    // Delete with confirmation
+    confirmDeleteMemory(id) {
+        document.getElementById('confirmModal').style.display = 'flex';
+        document.getElementById('confirmDeleteBtn').onclick = () => {
+            this.deleteMemory(id);
+            document.getElementById('confirmModal').style.display = 'none';
+        };
+    }
+
+    async deleteMemory(id) {
+        try {
+            await fetch('/api/memory/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            this.loadMemories();
+            this.loadMemoryStats();
+        } catch (err) {
+            alert('Error deleting memory: ' + err.message);
+        }
+    }
+
+    editMemory(id) {
+        const contentDiv = document.getElementById(`mem-content-${id}`);
+        if (!contentDiv) return;
+
+        const currentContent = contentDiv.textContent;
+        const newContent = prompt('Edit memory:', currentContent);
+
+        if (newContent !== null && newContent !== currentContent) {
+            fetch('/api/memory/edit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, content: newContent })
+            })
             .then(res => res.json())
             .then(data => {
-                const listDiv = document.getElementById('memoryList');
-                if (!data.memories || data.memories.length === 0) {
-                    listDiv.innerHTML = '<div class="placeholder-text">No memories stored yet.</div>';
-                    return;
+                if (data.success) {
+                    contentDiv.textContent = newContent;
+                    this.addNarratorEntry('Memory updated', '✏️');
+                } else {
+                    alert('Failed to update memory: ' + (data.error || 'Unknown error'));
                 }
-
-                let html = '';
-                data.memories.slice(0, 20).forEach(mem => {
-                    html += `
-                        <div class="memory-item">
-                            <div class="memory-content">${mem.content || mem.summary || ''}</div>
-                            <div class="memory-time">${new Date(mem.created_at * 1000).toLocaleString()}</div>
-                        </div>
-                    `;
-                });
-                listDiv.innerHTML = html;
             })
             .catch(err => {
-                console.error('Failed to load memories:', err);
+                alert('Error updating memory: ' + err.message);
             });
+        }
+    }
+
+    async deleteMemory(id) {
+        if (!confirm('Are you sure you want to delete this memory?')) return;
+
+        try {
+            const res = await fetch('/api/memory/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                const item = document.querySelector(`.memory-item[data-id="${id}"]`);
+                if (item) item.remove();
+                this.addNarratorEntry('Memory deleted', '🗑️');
+                this.loadMemoryStats();
+            } else {
+                alert('Failed to delete memory: ' + (data.error || 'Unknown error'));
+            }
+        } catch (err) {
+            alert('Error deleting memory: ' + err.message);
+        }
     }
 
     // ===== Diagnosis =====

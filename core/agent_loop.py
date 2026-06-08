@@ -338,16 +338,11 @@ class AgentLoop:
                             "content": f"RESEARCH TASK DETECTED. You MUST follow this workflow:\n\n{research_skill}"
                         })
 
-            # Call LLM with semantically selected tools (saves tokens)
+            # Call LLM with all tools — let the model choose based on descriptions
             self._emit(EventType.THINKING, f"Thinking (step {state.iteration})...", state)
-            # Include resume context in tool selection query
-            selection_query = goal
-            if resume:
-                selection_query = f"{goal} {resume}"
-            selected_tools = self.tool_router.select(selection_query, top_k=12)
             try:
                 llm_response = await self.llm_call(
-                    state.messages, compressed, tools=selected_tools
+                    state.messages, compressed, tools=_all_tools
                 )
             except Exception as e:
                 self._emit(EventType.ERROR, f"LLM error: {e}", state)

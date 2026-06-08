@@ -1,616 +1,795 @@
-# Zenith Codebook — 15 grouped tools
-# Grouped: calendar (5→1), spreadsheet (3→1)
-
-# ── File ─────────────────────────────────────────────────
-- token: "ACT:READ_FILE"
-  patterns: ["\\bread\\b", "\\bopen file\\b", "\\bcat\\b", "\\bshow file\\b", "\\bview file\\b"]
+- token: ACT:READ_FILE
+  patterns:
+  - \bread\b
+  - \bopen file\b
+  - \bcat\b
+  - \bshow file\b
+  - \bview file\b
   target: file
-  description: "Read a file (default: 500 lines). Use start_line/end_line (1-based) or offset/limit for large files. Returns numbered content. params: {path, start_line?, end_line?, offset?, limit?}"
+  description: 'Read a file (default: 500 lines). Use start_line/end_line (1-based)
+    or offset/limit for large files. Returns numbered content.'
   params_schema:
-    path: "string"
-    start_line: "number"
-    end_line: "number"
-    offset: "number"
-    limit: "number"
+    path: string
+    start_line: number
+    end_line: number
+    offset: number
+    limit: number
   risk_level: low
-
-- token: "ACT:WRITE_FILE"
-  patterns: ["\\bwrite\\b", "\\bsave\\b", "\\bcreate file\\b"]
+- token: ACT:WRITE_FILE
+  patterns:
+  - \bwrite\b
+  - \bsave\b
+  - \bcreate file\b
   target: file
-  description: "Write content to a file. params: {path, content}"
+  description: Write content to a file.
   params_schema:
-    path: "string"
-    content: "string"
+    path: string
+    content: string
   risk_level: medium
-
-- token: "ACT:EDIT_FILE"
-  patterns: ["\\bedit\\b", "\\bmodify\\b", "\\breplace in\\b"]
+- token: ACT:EDIT_FILE
+  patterns:
+  - \bedit\b
+  - \bmodify\b
+  - \breplace in\b
   target: file
-  description: "Find and replace text in a file. Returns unified diff. flexible=true normalizes whitespace. Fails if old_text matches multiple times unless replace_all=true. params: {path, old_text, new_text, replace_all?, flexible?}"
+  description: Find and replace text in a file. Returns unified diff. flexible=true
+    normalizes whitespace. Fails if old_text matches multiple times unless replace_all=true.
   params_schema:
-    path: "string"
-    old_text: "string"
-    new_text: "string"
-    replace_all: "boolean"
-    flexible: "boolean"
+    path: string
+    old_text: string
+    new_text: string
+    replace_all: boolean
+    flexible: boolean
   risk_level: medium
-
-- token: "ACT:DELETE_FILE"
-  patterns: ["\\bdelete file\\b", "\\bremove file\\b"]
+- token: ACT:DELETE_FILE
+  patterns:
+  - \bdelete file\b
+  - \bremove file\b
   target: file
-  description: "Delete a file. params: {path}"
+  description: Delete a file.
   params_schema:
-    path: "string"
+    path: string
   risk_level: high
-
-- token: "ACT:LIST_DIR"
-  patterns: ["\\blist\\b", "\\bls\\b", "\\bdir\\b", "\\bwhat files\\b", "\\bshow files\\b"]
+- token: ACT:LIST_DIR
+  patterns:
+  - \blist\b
+  - \bls\b
+  - \bdir\b
+  - \bwhat files\b
+  - \bshow files\b
   target: file
-  description: "List directory contents. params: {path}"
+  description: List directory contents.
   params_schema:
-    path: "string"
+    path: string
   risk_level: low
-
-- token: "ACT:GLOB_SEARCH"
-  patterns: ["\\bglob\\b", "\\bfind files\\b", "\\bfile pattern\\b", "\\bmatching files\\b"]
+- token: ACT:GLOB_SEARCH
+  patterns:
+  - \bglob\b
+  - \bfind files\b
+  - \bfile pattern\b
+  - \bmatching files\b
   target: file
-  description: "Find files by glob pattern. params: {pattern, path?}. Example: **/*.py, src/**/*.ts"
+  description: 'Find files by glob pattern.. Example: **/*.py, src/**/*.ts'
   params_schema:
-    pattern: "string"
-    path: "string"
+    pattern: string
+    path: string
   risk_level: low
-
-- token: "ACT:GREP_SEARCH"
-  patterns: ["\\bgrep\\b", "\\bsearch in files\\b", "\\bfind in code\\b", "\\bsearch code\\b", "\\bcontent search\\b"]
+- token: ACT:GREP_SEARCH
+  patterns:
+  - \bgrep\b
+  - \bsearch in files\b
+  - \bfind in code\b
+  - \bsearch code\b
+  - \bcontent search\b
   target: file
-  description: "Search file contents with regex. Uses ripgrep if available. params: {pattern, path?, glob?, output_mode?}. output_mode: files_with_matches|content|count"
+  description: 'Search file contents with regex. Uses ripgrep if available.. output_mode:
+    files_with_matches|content|count'
   params_schema:
-    pattern: "string"
-    path: "string"
-    glob: "string"
-    output_mode: "string"
+    pattern: string
+    path: string
+    glob: string
+    output_mode: string
   risk_level: low
-
-# ── Shell ────────────────────────────────────────────────
-- token: "ACT:RUN_COMMAND"
-  patterns: ["\\brun\\b", "\\bexecute\\b", "\\bshell\\b", "\\bterminal\\b", "\\bcmd\\b"]
+- token: ACT:RUN_COMMAND
+  patterns:
+  - \brun\b
+  - \bexecute\b
+  - \bshell\b
+  - \bterminal\b
+  - \bcmd\b
   target: shell
-  description: "Run a shell command. Use run_in_background for long-running commands (npm install, builds). Use stdin for interactive prompts. Default timeout 120s."
+  description: Run a shell command. Use run_in_background for long-running commands
+    (npm install, builds). Use stdin for interactive prompts. Default timeout 120s.
   params_schema:
-    command: "string"
-    stdin: "string"
-    timeout: "number"
-    run_in_background: "boolean"
+    command: string
+    stdin: string
+    timeout: number
+    run_in_background: boolean
   risk_level: high
-
-- token: "ACT:CHECK_BACKGROUND"
-  patterns: ["\\bcheck background\\b", "\\bcheck task\\b", "\\bbackground status\\b"]
+- token: ACT:CHECK_BACKGROUND
+  patterns:
+  - \bcheck background\b
+  - \bcheck task\b
+  - \bbackground status\b
   target: shell
-  description: "Check status of a background command. params: {task_id?} — omit task_id to list all."
+  description: Check status of a background command. — omit task_id to list all.
   params_schema:
-    task_id: "string"
+    task_id: string
   risk_level: low
-
-# ── Web ──────────────────────────────────────────────────
-- token: "ACT:WEB_SEARCH"
-  patterns: ["\\bsearch\\b", "\\bgoogle\\b", "\\bfind info\\b", "\\blook up\\b"]
+- token: ACT:WEB_SEARCH
+  patterns:
+  - \bsearch\b
+  - \bgoogle\b
+  - \bfind info\b
+  - \blook up\b
   target: webmcp
-  description: "Search the web for information. Use this for ANY research task. NEVER write from memory alone. params: {query, max_results?, allowed_domains?, blocked_domains?}"
+  description: Search the web for information. Use this for ANY research task. NEVER
+    write from memory alone.
   params_schema:
-    query: "string"
-    max_results: "number"
-    allowed_domains: "array"
-    blocked_domains: "array"
+    query: string
+    max_results: number
+    allowed_domains: array
+    blocked_domains: array
   risk_level: low
-
-- token: "ACT:FETCH"
-  patterns: ["\\bfetch\\b", "\\bget url\\b", "\\bhttp\\b"]
+- token: ACT:FETCH
+  patterns:
+  - \bfetch\b
+  - \bget url\b
+  - \bhttp\b
   target: webmcp
-  description: "Fetch and read URL content. params: {url}"
+  description: Fetch and read URL content.
   params_schema:
-    url: "string"
+    url: string
   risk_level: low
-
-- token: "ACT:SCRAPE"
-  patterns: ["\\bscrape\\b", "\\bextract from\\b", "\\bparse page\\b"]
+- token: ACT:SCRAPE
+  patterns:
+  - \bscrape\b
+  - \bextract from\b
+  - \bparse page\b
   target: webmcp
-  description: "Scrape a webpage to clean markdown. params: {url}"
+  description: Scrape a webpage to clean markdown.
   params_schema:
-    url: "string"
+    url: string
   risk_level: low
-
-# ── Memory ───────────────────────────────────────────────
-- token: "ACT:RECALL"
-  patterns: ["\\brecall\\b", "\\bremember\\b", "\\bwhat did\\b", "\\bmemory\\b"]
+- token: ACT:RECALL
+  patterns:
+  - \brecall\b
+  - \bremember\b
+  - \bwhat did\b
+  - \bmemory\b
   target: system
-  description: "Search memory for past conversations. params: {query}"
+  description: Search memory for past conversations.
   params_schema:
-    query: "string"
+    query: string
   risk_level: low
-
-- token: "ACT:STORE_MEMORY"
-  patterns: ["\\bremember that\\b", "\\bstore\\b", "\\bsave to memory\\b", "\\bnote that\\b"]
+- token: ACT:STORE_MEMORY
+  patterns:
+  - \bremember that\b
+  - \bstore\b
+  - \bsave to memory\b
+  - \bnote that\b
   target: system
-  description: "Store information in long-term memory. params: {content}"
+  description: Store information in long-term memory.
   params_schema:
-    content: "string"
+    content: string
   risk_level: low
-
-# ── System ───────────────────────────────────────────────
-- token: "ACT:GET_TIME"
-  patterns: ["\\bwhat time\\b", "\\bdate\\b", "\\btoday\\b", "\\btime\\b"]
+- token: ACT:GET_TIME
+  patterns:
+  - \bwhat time\b
+  - \bdate\b
+  - \btoday\b
+  - \btime\b
   target: system
-  description: "Get current date and time. No params."
+  description: Get current date and time. No params.
   params_schema: {}
   risk_level: low
-
-- token: "ACT:GET_WEATHER"
-  patterns: ["\\bweather\\b", "\\btemperature\\b", "\\bforecast\\b", "\\bhow hot\\b", "\\brain\\b", "\\bsunny\\b"]
+- token: ACT:GET_WEATHER
+  patterns:
+  - \bweather\b
+  - \btemperature\b
+  - \bforecast\b
+  - \bhow hot\b
+  - \brain\b
+  - \bsunny\b
   target: system
-  description: "Get current weather for a location. params: {location}"
+  description: Get current weather for a location.
   params_schema:
-    location: "string"
+    location: string
   risk_level: low
-
-# ── Document Processing ─────────────────────────────────
-- token: "ACT:PARSE_DOCUMENT"
-  patterns: ["\\bread pdf\\b", "\\bparse\\b", "\\bprocess file\\b", "\\bopen excel\\b", "\\bopen csv\\b", "\\bread excel\\b", "\\bread csv\\b", "\\bextract data\\b"]
+- token: ACT:PARSE_DOCUMENT
+  patterns:
+  - \bread pdf\b
+  - \bparse\b
+  - \bprocess file\b
+  - \bopen excel\b
+  - \bopen csv\b
+  - \bread excel\b
+  - \bread csv\b
+  - \bextract data\b
   target: file
-  description: "Parse document (PDF/Excel/CSV/DOCX/JSON). params: {path}"
+  description: Parse document (PDF/Excel/CSV/DOCX/JSON).
   params_schema:
-    path: "string"
+    path: string
   risk_level: low
-
-# ── Spreadsheet (grouped) ──
-- token: "ACT:SPREADSHEET"
-  patterns: ["\\bwrite csv\\b", "\\bcreate csv\\b", "\\bwrite excel\\b", "\\bcreate excel\\b", "\\bfill form\\b", "\\bfill template\\b", "\\bpopulate\\b"]
+- token: ACT:SPREADSHEET
+  patterns:
+  - \bwrite csv\b
+  - \bcreate csv\b
+  - \bwrite excel\b
+  - \bcreate excel\b
+  - \bfill form\b
+  - \bfill template\b
+  - \bpopulate\b
   target: file
-  description: "Spreadsheet operations. action: write_csv {path,headers,rows} | write_excel {path,sheets} | fill_form {template_path,output_path,data}"
+  description: 'Spreadsheet operations. action: write_csv {path,headers,rows} | write_excel
+    {path,sheets} | fill_form {template_path,output_path,data}'
   params_schema:
-    action: "string"
-    path: "string"
-    headers: "array"
-    rows: "array"
-    sheets: "object"
-    template_path: "string"
-    output_path: "string"
-    data: "object"
+    action: string
+    path: string
+    headers: array
+    rows: array
+    sheets: object
+    template_path: string
+    output_path: string
+    data: object
   risk_level: low
-
-# ── Calendar (grouped) ──
-- token: "ACT:CALENDAR"
-  patterns: ["\\bschedule\\b", "\\bcalendar\\b", "\\bcreate event\\b", "\\badd event\\b", "\\bmy schedule\\b", "\\bplan my day\\b", "\\bupdate event\\b", "\\bcancel event\\b", "\\bdelete event\\b", "\\bupcoming\\b", "\\bremind me\\b"]
+- token: ACT:CALENDAR
+  patterns:
+  - \bschedule\b
+  - \bcalendar\b
+  - \bcreate event\b
+  - \badd event\b
+  - \bmy schedule\b
+  - \bplan my day\b
+  - \bupdate event\b
+  - \bcancel event\b
+  - \bdelete event\b
+  - \bupcoming\b
+  - \bremind me\b
   target: system
-  description: "Calendar management. action: create {title,date,start_time} | list {days?} | update {event_id,fields} | delete {event_id} | plan {date?}"
+  description: 'Calendar management. action: create {title,date,start_time} | list
+    {days?} | update {event_id,fields} | delete {event_id} | plan {date?}'
   params_schema:
-    action: "string"
-    title: "string"
-    date: "string"
-    start_time: "string"
-    end_time: "string"
-    description: "string"
-    event_id: "string"
-    fields: "object"
-    days: "number"
+    action: string
+    title: string
+    date: string
+    start_time: string
+    end_time: string
+    description: string
+    event_id: string
+    fields: object
+    days: number
   risk_level: low
-
-# ── Dynamic Tool Creation ──
-- token: "ACT:CREATE_TOOL"
-  patterns: ["\\bcreate tool\\b", "\\bmake tool\\b", "\\bnew tool\\b", "\\bbuild tool\\b"]
+- token: ACT:CREATE_TOOL
+  patterns:
+  - \bcreate tool\b
+  - \bmake tool\b
+  - \bnew tool\b
+  - \bbuild tool\b
   target: system
-  description: "Create a new tool at runtime. params: {name, description, code, parameters?}. Code must define a class extending BaseDynamicTool."
+  description: Create a new tool at runtime.. Code must define a class extending BaseDynamicTool.
   params_schema:
-    name: "string"
-    description: "string"
-    code: "string"
-    parameters: "object"
+    name: string
+    description: string
+    code: string
+    parameters: object
   risk_level: medium
-
-- token: "ACT:DELETE_DYNAMIC_TOOL"
-  patterns: ["\\bdelete tool\\b", "\\bremove tool\\b"]
+- token: ACT:DELETE_DYNAMIC_TOOL
+  patterns:
+  - \bdelete tool\b
+  - \bremove tool\b
   target: system
-  description: "Delete a dynamically created tool. params: {name}"
+  description: Delete a dynamically created tool.
   params_schema:
-    name: "string"
+    name: string
   risk_level: medium
-
-# ── Browse.sh (Browser Automation) ──
-- token: "ACT:BROWSE_OPEN"
-  patterns: ["\\bopen url\\b", "\\bgo to\\b", "\\bnavigate to\\b", "\\bbrowse to\\b", "\\bopen website\\b", "\\bopen page\\b"]
+- token: ACT:BROWSE_OPEN
+  patterns:
+  - \bopen url\b
+  - \bgo to\b
+  - \bnavigate to\b
+  - \bbrowse to\b
+  - \bopen website\b
+  - \bopen page\b
   target: browse
-  description: "Open a URL in browser. Reuses existing session (cookies persist). params: {url, session?, headless?, timeout?, auto_connect?, cdp?}"
+  description: Open a URL in browser. Reuses existing session (cookies persist).
   params_schema:
-    url: "string"
-    session: "string"
-    headless: "boolean"
-    timeout: "number"
-    auto_connect: "boolean"
-    cdp: "string"
+    url: string
+    session: string
+    headless: boolean
+    timeout: number
+    auto_connect: boolean
+    cdp: string
   risk_level: low
-
-- token: "ACT:BROWSE_SNAPSHOT"
-  patterns: ["\\bpage snapshot\\b", "\\bpage structure\\b", "\\bget elements\\b", "\\bpage refs\\b", "\\bbrowse snapshot\\b"]
+- token: ACT:BROWSE_SNAPSHOT
+  patterns:
+  - \bpage snapshot\b
+  - \bpage structure\b
+  - \bget elements\b
+  - \bpage refs\b
+  - \bbrowse snapshot\b
   target: browse
-  description: "Get accessibility snapshot of active page (cached refs for click/fill). params: {session?, filter?, max_depth?}"
+  description: Get accessibility snapshot of active page (cached refs for click/fill).
   params_schema:
-    session: "string"
-    filter: "string"
-    max_depth: "number"
+    session: string
+    filter: string
+    max_depth: number
   risk_level: low
-
-- token: "ACT:BROWSE_CLICK"
-  patterns: ["\\bbrowse click\\b", "\\bclick element\\b", "\\bclick on\\b"]
+- token: ACT:BROWSE_CLICK
+  patterns:
+  - \bbrowse click\b
+  - \bclick element\b
+  - \bclick on\b
   target: browse
-  description: "Click an element by snapshot ref (@0-12), XPath, or CSS selector. params: {selector, session?}"
+  description: Click an element by snapshot ref (@0-12), XPath, or CSS selector.
   params_schema:
-    selector: "string"
-    session: "string"
+    selector: string
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_FILL"
-  patterns: ["\\bbrowse fill\\b", "\\bfill input\\b", "\\btype in\\b", "\\benter text in\\b"]
+- token: ACT:BROWSE_FILL
+  patterns:
+  - \bbrowse fill\b
+  - \bfill input\b
+  - \btype in\b
+  - \benter text in\b
   target: browse
-  description: "Fill an input element by snapshot ref, XPath, or selector. params: {selector, value, session?, press_enter?}"
+  description: Fill an input element by snapshot ref, XPath, or selector.
   params_schema:
-    selector: "string"
-    value: "string"
-    session: "string"
-    press_enter: "boolean"
+    selector: string
+    value: string
+    session: string
+    press_enter: boolean
   risk_level: low
-
-- token: "ACT:BROWSE_GET"
-  patterns: ["\\bget page text\\b", "\\bget page html\\b", "\\bget page markdown\\b", "\\bget page title\\b", "\\bpage content\\b"]
+- token: ACT:BROWSE_GET
+  patterns:
+  - \bget page text\b
+  - \bget page html\b
+  - \bget page markdown\b
+  - \bget page title\b
+  - \bpage content\b
   target: browse
-  description: "Read page data. what: url|title|text|html|markdown|value. params: {what, selector?, session?}"
+  description: 'Read page data. what: url|title|text|html|markdown|value.'
   params_schema:
-    what: "string"
-    selector: "string"
-    session: "string"
+    what: string
+    selector: string
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_SCREENSHOT"
-  patterns: ["\\bscreenshot\\b", "\\bcapture page\\b", "\\btake screenshot\\b"]
+- token: ACT:BROWSE_SCREENSHOT
+  patterns:
+  - \bscreenshot\b
+  - \bcapture page\b
+  - \btake screenshot\b
   target: browse
-  description: "Take a screenshot of the active browser page. params: {session?}"
+  description: Take a screenshot of the active browser page.
   params_schema:
-    session: "string"
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_SKILLS"
-  patterns: ["\\bbrowse skills\\b", "\\bfind skill\\b", "\\bwebsite skills\\b", "\\bsite playbook\\b"]
+- token: ACT:BROWSE_SKILLS
+  patterns:
+  - \bbrowse skills\b
+  - \bfind skill\b
+  - \bwebsite skills\b
+  - \bsite playbook\b
   target: browse
-  description: "Search browse.sh catalog for pre-built browser automation playbooks. params: {query?, limit?}"
+  description: Search browse.sh catalog for pre-built browser automation playbooks.
   params_schema:
-    query: "string"
-    limit: "number"
+    query: string
+    limit: number
   risk_level: low
-
-- token: "ACT:BROWSE_EVAL"
-  patterns: ["\\bbrowse eval\\b", "\\brun js\\b", "\\bexecute javascript\\b", "\\beval js\\b"]
+- token: ACT:BROWSE_EVAL
+  patterns:
+  - \bbrowse eval\b
+  - \brun js\b
+  - \bexecute javascript\b
+  - \beval js\b
   target: browse
-  description: "Evaluate JavaScript in the active browser page. params: {expression, session?}"
+  description: Evaluate JavaScript in the active browser page.
   params_schema:
-    expression: "string"
-    session: "string"
+    expression: string
+    session: string
   risk_level: medium
-
-- token: "ACT:BROWSE_WAIT"
-  patterns: ["\\bbrowse wait\\b", "\\bwait for page\\b", "\\bwait for element\\b"]
+- token: ACT:BROWSE_WAIT
+  patterns:
+  - \bbrowse wait\b
+  - \bwait for page\b
+  - \bwait for element\b
   target: browse
-  description: "Wait for load state, selector, or timeout. params: {selector_or_state, session?, timeout?}"
+  description: Wait for load state, selector, or timeout.
   params_schema:
-    selector_or_state: "string"
-    session: "string"
-    timeout: "number"
+    selector_or_state: string
+    session: string
+    timeout: number
   risk_level: low
-
-- token: "ACT:BROWSE_SCROLL"
-  patterns: ["\\bscroll page\\b", "\\bscroll down\\b", "\\bscroll up\\b", "\\bscroll left\\b", "\\bscroll right\\b"]
+- token: ACT:BROWSE_SCROLL
+  patterns:
+  - \bscroll page\b
+  - \bscroll down\b
+  - \bscroll up\b
+  - \bscroll left\b
+  - \bscroll right\b
   target: browse
-  description: "Scroll the page in a direction. params: {direction (up/down/left/right), amount?, session?}"
+  description: Scroll the page in a direction.
   params_schema:
-    direction: "string"
-    amount: "number"
-    session: "string"
+    direction: string
+    amount: number
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_SCROLL_TO"
-  patterns: ["\\bscroll to\\b", "\\bscroll to element\\b"]
+- token: ACT:BROWSE_SCROLL_TO
+  patterns:
+  - \bscroll to\b
+  - \bscroll to element\b
   target: browse
-  description: "Scroll to a specific element. params: {selector, session?}"
+  description: Scroll to a specific element.
   params_schema:
-    selector: "string"
-    session: "string"
+    selector: string
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_HOVER"
-  patterns: ["\\bhover\\b", "\\bhover over\\b", "\\bmouse over\\b"]
+- token: ACT:BROWSE_HOVER
+  patterns:
+  - \bhover\b
+  - \bhover over\b
+  - \bmouse over\b
   target: browse
-  description: "Hover over an element (for dropdowns, tooltips). params: {selector, session?}"
+  description: Hover over an element (for dropdowns, tooltips).
   params_schema:
-    selector: "string"
-    session: "string"
+    selector: string
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_RIGHT_CLICK"
-  patterns: ["\\bright click\\b", "\\bcontext menu\\b", "\\bright-click\\b"]
+- token: ACT:BROWSE_RIGHT_CLICK
+  patterns:
+  - \bright click\b
+  - \bcontext menu\b
+  - \bright-click\b
   target: browse
-  description: "Right-click an element for context menu. params: {selector, session?}"
+  description: Right-click an element for context menu.
   params_schema:
-    selector: "string"
-    session: "string"
+    selector: string
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_DOUBLE_CLICK"
-  patterns: ["\\bdouble click\\b", "\\bdouble-click\\b", "\\bdblclick\\b"]
+- token: ACT:BROWSE_DOUBLE_CLICK
+  patterns:
+  - \bdouble click\b
+  - \bdouble-click\b
+  - \bdblclick\b
   target: browse
-  description: "Double-click an element. params: {selector, session?}"
+  description: Double-click an element.
   params_schema:
-    selector: "string"
-    session: "string"
+    selector: string
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_SELECT"
-  patterns: ["\\bselect option\\b", "\\bchoose option\\b", "\\bdropdown select\\b"]
+- token: ACT:BROWSE_SELECT
+  patterns:
+  - \bselect option\b
+  - \bchoose option\b
+  - \bdropdown select\b
   target: browse
-  description: "Select a value in a dropdown. params: {selector, value, session?}"
+  description: Select a value in a dropdown.
   params_schema:
-    selector: "string"
-    value: "string"
-    session: "string"
+    selector: string
+    value: string
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_KEYPRESS"
-  patterns: ["\\bpress key\\b", "\\bkeyboard shortcut\\b", "\\bhotkey\\b", "\\bkey press\\b"]
+- token: ACT:BROWSE_KEYPRESS
+  patterns:
+  - \bpress key\b
+  - \bkeyboard shortcut\b
+  - \bhotkey\b
+  - \bkey press\b
   target: browse
-  description: "Press keyboard keys or shortcuts (e.g. 'Ctrl+c', 'Enter'). params: {keys, session?}"
+  description: Press keyboard keys or shortcuts (e.g. 'Ctrl+c', 'Enter').
   params_schema:
-    keys: "string"
-    session: "string"
+    keys: string
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_DRAG"
-  patterns: ["\\bdrag\\b", "\\bdrag and drop\\b", "\\bdrop\\b"]
+- token: ACT:BROWSE_DRAG
+  patterns:
+  - \bdrag\b
+  - \bdrag and drop\b
+  - \bdrop\b
   target: browse
-  description: "Drag from one element to another. params: {from_selector, to_selector, session?}"
+  description: Drag from one element to another.
   params_schema:
-    from_selector: "string"
-    to_selector: "string"
-    session: "string"
+    from_selector: string
+    to_selector: string
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_FOCUS"
-  patterns: ["\\bfocus element\\b", "\\bfocus on\\b"]
+- token: ACT:BROWSE_FOCUS
+  patterns:
+  - \bfocus element\b
+  - \bfocus on\b
   target: browse
-  description: "Focus an element. params: {selector, session?}"
+  description: Focus an element.
   params_schema:
-    selector: "string"
-    session: "string"
+    selector: string
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_HIGHLIGHT"
-  patterns: ["\\bhighlight\\b", "\\bhighlight element\\b"]
+- token: ACT:BROWSE_HIGHLIGHT
+  patterns:
+  - \bhighlight\b
+  - \bhighlight element\b
   target: browse
-  description: "Highlight an element with a red border. params: {selector, session?}"
+  description: Highlight an element with a red border.
   params_schema:
-    selector: "string"
-    session: "string"
+    selector: string
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_GET_LINKS"
-  patterns: ["\\bget links\\b", "\\blist links\\b", "\\bextract links\\b"]
+- token: ACT:BROWSE_GET_LINKS
+  patterns:
+  - \bget links\b
+  - \blist links\b
+  - \bextract links\b
   target: browse
-  description: "Get all links on the page. params: {session?}"
+  description: Get all links on the page.
   params_schema:
-    session: "string"
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_GET_FORMS"
-  patterns: ["\\bget forms\\b", "\\blist forms\\b", "\\bextract forms\\b"]
+- token: ACT:BROWSE_GET_FORMS
+  patterns:
+  - \bget forms\b
+  - \blist forms\b
+  - \bextract forms\b
   target: browse
-  description: "Get all forms on the page. params: {session?}"
+  description: Get all forms on the page.
   params_schema:
-    session: "string"
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_BACK"
-  patterns: ["\\bgo back\\b", "\\bbrowser back\\b", "\\bnav back\\b"]
+- token: ACT:BROWSE_BACK
+  patterns:
+  - \bgo back\b
+  - \bbrowser back\b
+  - \bnav back\b
   target: browse
-  description: "Navigate back in browser history. params: {session?}"
+  description: Navigate back in browser history.
   params_schema:
-    session: "string"
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_FORWARD"
-  patterns: ["\\bgo forward\\b", "\\bbrowser forward\\b", "\\bnav forward\\b"]
+- token: ACT:BROWSE_FORWARD
+  patterns:
+  - \bgo forward\b
+  - \bbrowser forward\b
+  - \bnav forward\b
   target: browse
-  description: "Navigate forward in browser history. params: {session?}"
+  description: Navigate forward in browser history.
   params_schema:
-    session: "string"
+    session: string
   risk_level: low
-
-- token: "ACT:BROWSE_REFRESH"
-  patterns: ["\\brefresh page\\b", "\\breload page\\b", "\\brefresh\\b"]
+- token: ACT:BROWSE_REFRESH
+  patterns:
+  - \brefresh page\b
+  - \breload page\b
+  - \brefresh\b
   target: browse
-  description: "Refresh the current page. params: {session?}"
+  description: Refresh the current page.
   params_schema:
-    session: "string"
+    session: string
   risk_level: low
-
-# ── Skills ────────────────────────────────────────────
-- token: "ACT:LOAD_SKILL"
-  patterns: ["\\bload skill\\b", "\\bshow skill\\b", "\\bread skill\\b"]
+- token: ACT:LOAD_SKILL
+  patterns:
+  - \bload skill\b
+  - \bshow skill\b
+  - \bread skill\b
   target: skill
-  description: "Load a skill's full content by name. Use when you need to read the full instructions for a skill listed in your available skills. params: {name}"
+  description: Load a skill's full content by name. Use when you need to read the
+    full instructions for a skill listed in your available skills.
   params_schema:
-    name: "string"
+    name: string
   risk_level: low
-
-# ── Goals ─────────────────────────────────────────────
-- token: "ACT:GOALS"
-  patterns: ["\\bgoal\\b", "\\bgoals\\b", "\\btrack goal\\b", "\\bset goal\\b", "\\bmilestone\\b", "\\bprogress\\b"]
+- token: ACT:GOALS
+  patterns:
+  - \bgoal\b
+  - \bgoals\b
+  - \btrack goal\b
+  - \bset goal\b
+  - \bmilestone\b
+  - \bprogress\b
   target: goals
-  description: "Track goals and milestones. Actions: create, list, update, complete, add_milestone, update_milestone, delete. params: {action, title?, goal_id?, milestone_id?, status?, deadline?, description?, milestones?, fields?}"
+  description: 'Track goals and milestones. Actions: create, list, update, complete,
+    add_milestone, update_milestone, delete.'
   params_schema:
-    action: "string"
-    title: "string"
-    goal_id: "string"
-    milestone_id: "string"
-    status: "string"
-    deadline: "string"
-    description: "string"
-    milestones: "array"
-    fields: "object"
+    action: string
+    title: string
+    goal_id: string
+    milestone_id: string
+    status: string
+    deadline: string
+    description: string
+    milestones: array
+    fields: object
   risk_level: low
-
-# ── Reminders ────────────────────────────────────────
-- token: "ACT:REMINDERS"
-  patterns: ["\\bremind\\b", "\\breminder\\b", "\\bschedule\\b", "\\bscheduler\\b", "\\brecurring\\b", "\\balarm\\b"]
+- token: ACT:REMINDERS
+  patterns:
+  - \bremind\b
+  - \breminder\b
+  - \bschedule\b
+  - \bscheduler\b
+  - \brecurring\b
+  - \balarm\b
   target: reminders
-  description: "Set reminders and recurring schedules. Actions: create, recurring, list, dismiss, delete. params: {action, title?, datetime?, time?, recurrence?, description?, reminder_id?, show_all?}"
+  description: 'Set reminders and recurring schedules. Actions: create, recurring,
+    list, dismiss, delete.'
   params_schema:
-    action: "string"
-    title: "string"
-    datetime: "string"
-    time: "string"
-    recurrence: "string"
-    description: "string"
-    reminder_id: "string"
-    show_all: "boolean"
+    action: string
+    title: string
+    datetime: string
+    time: string
+    recurrence: string
+    description: string
+    reminder_id: string
+    show_all: boolean
   risk_level: low
-
-# ── Subagent ───────────────────────────────────────────
-- token: "ACT:DISPATCH_AGENT"
-  patterns: ["\\bdelegate\\b", "\\bsubagent\\b", "\\bdispatch\\b", "\\bspawn agent\\b"]
+- token: ACT:DISPATCH_AGENT
+  patterns:
+  - \bdelegate\b
+  - \bsubagent\b
+  - \bdispatch\b
+  - \bspawn agent\b
   target: subagent
-  description: "Delegate a subtask to a fresh agent. params: {task, context?, model?}"
+  description: Delegate a subtask to a fresh agent.
   params_schema:
-    task: "string"
-    context: "string"
-    model: "string"
+    task: string
+    context: string
+    model: string
   risk_level: low
-
-- token: "ACT:DISPATCH_PARALLEL"
-  patterns: ["\\bparallel\\b", "\\bsimultaneously\\b", "\\bat same time\\b", "\\bmulti-agent\\b"]
+- token: ACT:DISPATCH_PARALLEL
+  patterns:
+  - \bparallel\b
+  - \bsimultaneously\b
+  - \bat same time\b
+  - \bmulti-agent\b
   target: subagent
-  description: "Run multiple independent subtasks in parallel. params: {tasks: [{task, context?}]}"
+  description: Run multiple independent subtasks in parallel.]}
   params_schema:
-    tasks: "array"
+    tasks: array
   risk_level: low
-
-# ── PC Control ─────────────────────────────────────────
-- token: "ACT:PC_GET_WINDOWS"
-  patterns: ["\\blist windows\\b", "\\bget windows\\b", "\\bshow windows\\b", "\\bdesktop windows\\b"]
+- token: ACT:PC_GET_WINDOWS
+  patterns:
+  - \blist windows\b
+  - \bget windows\b
+  - \bshow windows\b
+  - \bdesktop windows\b
   target: pc
-  description: "List all open desktop windows. params: {}"
+  description: List all open desktop windows.
   params_schema: {}
   risk_level: low
-
-- token: "ACT:PC_GET_UI_TREE"
-  patterns: ["\\bui tree\\b", "\\baccessibility tree\\b", "\\bdesktop elements\\b", "\\bui elements\\b"]
+- token: ACT:PC_GET_UI_TREE
+  patterns:
+  - \bui tree\b
+  - \baccessibility tree\b
+  - \bdesktop elements\b
+  - \bui elements\b
   target: pc
-  description: "Get accessibility tree of a desktop window. params: {window_title?, max_depth?}"
+  description: Get accessibility tree of a desktop window.
   params_schema:
-    window_title: "string"
-    max_depth: "number"
+    window_title: string
+    max_depth: number
   risk_level: low
-
-- token: "ACT:PC_CLICK"
-  patterns: ["\\bdesktop click\\b", "\\bui click\\b", "\\bclick on desktop\\b", "\\bclick button\\b"]
+- token: ACT:PC_CLICK
+  patterns:
+  - \bdesktop click\b
+  - \bui click\b
+  - \bclick on desktop\b
+  - \bclick button\b
   target: pc
-  description: "Click a UI element by automation_id, name, or control_type. params: {selector, window_title?}"
+  description: Click a UI element by automation_id, name, or control_type.
   params_schema:
-    selector: "string"
-    window_title: "string"
+    selector: string
+    window_title: string
   risk_level: medium
-
-- token: "ACT:PC_FILL"
-  patterns: ["\\bdesktop type\\b", "\\bui type\\b", "\\btype in desktop\\b", "\\bfill desktop input\\b"]
+- token: ACT:PC_FILL
+  patterns:
+  - \bdesktop type\b
+  - \bui type\b
+  - \btype in desktop\b
+  - \bfill desktop input\b
   target: pc
-  description: "Type text into a desktop UI element. params: {selector, value, window_title?}"
+  description: Type text into a desktop UI element.
   params_schema:
-    selector: "string"
-    value: "string"
-    window_title: "string"
+    selector: string
+    value: string
+    window_title: string
   risk_level: medium
-
-- token: "ACT:PC_PRESS"
-  patterns: ["\\bpress key\\b", "\\bhotkey\\b", "\\bkeyboard shortcut\\b"]
+- token: ACT:PC_PRESS
+  patterns:
+  - \bpress key\b
+  - \bhotkey\b
+  - \bkeyboard shortcut\b
   target: pc
-  description: "Press a key or key combination. params: {keys, window_title?}"
+  description: Press a key or key combination.
   params_schema:
-    keys: "string"
-    window_title: "string"
+    keys: string
+    window_title: string
   risk_level: low
-
-- token: "ACT:PC_SCREENSHOT"
-  patterns: ["\\bdesktop screenshot\\b", "\\bscreen capture\\b", "\\bcapture screen\\b"]
+- token: ACT:PC_SCREENSHOT
+  patterns:
+  - \bdesktop screenshot\b
+  - \bscreen capture\b
+  - \bcapture screen\b
   target: pc
-  description: "Take a screenshot of a desktop window. params: {window_title?}"
+  description: Take a screenshot of a desktop window.
   params_schema:
-    window_title: "string"
+    window_title: string
   risk_level: low
-
-- token: "ACT:PC_LAUNCH"
-  patterns: ["\\blaunch app\\b", "\\bopen app\\b", "\\bstart app\\b", "\\brun app\\b"]
+- token: ACT:PC_LAUNCH
+  patterns:
+  - \blaunch app\b
+  - \bopen app\b
+  - \bstart app\b
+  - \brun app\b
   target: pc
-  description: "Launch a desktop application. params: {app_path, args?}"
+  description: Launch a desktop application.
   params_schema:
-    app_path: "string"
-    args: "string"
+    app_path: string
+    args: string
   risk_level: low
-
-- token: "ACT:PC_FOCUS"
-  patterns: ["\\bfocus window\\b", "\\bbring to front\\b", "\\bactivate window\\b"]
+- token: ACT:PC_FOCUS
+  patterns:
+  - \bfocus window\b
+  - \bbring to front\b
+  - \bactivate window\b
   target: pc
-  description: "Bring a window to focus. params: {window_title}"
+  description: Bring a window to focus.
   params_schema:
-    window_title: "string"
+    window_title: string
   risk_level: low
-
-# ── Science Research Engine ──────────────────────────────────
-- token: "ACT:SCIENCE_RESEARCH"
-  patterns: ["\\bresearch\\b", "\\bscience\\b", "\\bstudy\\b", "\\binvestigate\\b", "\\bhypothesis\\b"]
+- token: ACT:SCIENCE_RESEARCH
+  patterns:
+  - \bresearch\b
+  - \bscience\b
+  - \bstudy\b
+  - \binvestigate\b
+  - \bhypothesis\b
   target: system
-  description: "Science research with Socratic rebuttal. Auto-detects domain (new_energy, pharma, cross_domain). Checks claims against physics laws and literature. params: {query, depth? (normal|deep)}"
+  description: Science research with Socratic rebuttal. Auto-detects domain (new_energy,
+    pharma, cross_domain). Checks claims against physics laws and literature.
   params_schema:
-    query: "string"
-    depth: "string"
+    query: string
+    depth: string
   risk_level: low
-
-- token: "ACT:ANALYZE_MOLECULE"
-  patterns: ["\\banalyze molecule\\b", "\\bsmiles\\b", "\\bdrug likeness\\b", "\\blipinski\\b"]
+- token: ACT:ANALYZE_MOLECULE
+  patterns:
+  - \banalyze molecule\b
+  - \bsmiles\b
+  - \bdrug likeness\b
+  - \blipinski\b
   target: system
-  description: "Analyze molecule drug-likeness using RDKit. Returns MW, LogP, HBD, HBA, TPSA, Lipinski Ro5. params: {smiles}"
+  description: Analyze molecule drug-likeness using RDKit. Returns MW, LogP, HBD,
+    HBA, TPSA, Lipinski Ro5.
   params_schema:
-    smiles: "string"
+    smiles: string
   risk_level: low
-
-- token: "ACT:CHECK_BATTERY_CLAIM"
-  patterns: ["\\bbattery claim\\b", "\\benergy density\\b", "\\bwh/kg\\b"]
+- token: ACT:CHECK_BATTERY_CLAIM
+  patterns:
+  - \bbattery claim\b
+  - \benergy density\b
+  - \bwh/kg\b
   target: system
-  description: "Validate battery energy density claim against theoretical limits. params: {material, energy_density}"
+  description: Validate battery energy density claim against theoretical limits.
   params_schema:
-    material: "string"
-    energy_density: "number"
+    material: string
+    energy_density: number
   risk_level: low
-
-- token: "ACT:CHECK_FUSION_LAWSON"
-  patterns: ["\\bfusion\\b", "\\blawson\\b", "\\bignition\\b", "\\bplasma\\b"]
+- token: ACT:CHECK_FUSION_LAWSON
+  patterns:
+  - \bfusion\b
+  - \blawson\b
+  - \bignition\b
+  - \bplasma\b
   target: system
-  description: "Check if fusion conditions meet Lawson criterion. params: {density_m3, confinement_s, temperature_kev}"
+  description: Check if fusion conditions meet Lawson criterion.
   params_schema:
-    density_m3: "number"
-    confinement_s: "number"
-    temperature_kev: "number"
+    density_m3: number
+    confinement_s: number
+    temperature_kev: number
   risk_level: low
-
-- token: "ACT:COMPUTE_DEBYE_LENGTH"
-  patterns: ["\\bdebye\\b", "\\belectrolyte\\b", "\\bscreening\\b"]
+- token: ACT:COMPUTE_DEBYE_LENGTH
+  patterns:
+  - \bdebye\b
+  - \belectrolyte\b
+  - \bscreening\b
   target: system
-  description: "Compute Debye length for electrolyte screening. params: {temperature_k, concentration_mol_L, charge_number?}"
+  description: Compute Debye length for electrolyte screening.
   params_schema:
-    temperature_k: "number"
-    concentration_mol_L: "number"
-    charge_number: "number"
+    temperature_k: number
+    concentration_mol_L: number
+    charge_number: number
   risk_level: low

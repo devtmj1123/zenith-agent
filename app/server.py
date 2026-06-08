@@ -139,10 +139,28 @@ def api_chat():
         return jsonify({'error': 'No message provided'}), 400
 
     try:
+        # Save user message to history
+        _chat_history.append({
+            'role': 'user',
+            'content': message,
+            'timestamp': time.time()
+        })
+
         agent = get_agent()
         state = run_async(agent.run(message, session_id="web"))
+        response = state.final_response or ''
+
+        # Save assistant response to history
+        _chat_history.append({
+            'role': 'assistant',
+            'content': response,
+            'tool_calls': state.tool_calls_made,
+            'tokens_used': state.tokens_used,
+            'timestamp': time.time()
+        })
+
         return jsonify({
-            'response': state.final_response or '',
+            'response': response,
             'tool_calls': state.tool_calls_made,
             'tokens_used': state.tokens_used
         })
@@ -227,6 +245,81 @@ def api_memory_search():
         return jsonify({'memories': results})
     except Exception as e:
         return jsonify({'memories': [], 'error': str(e)})
+
+
+@app.route('/api/memory/create', methods=['POST'])
+def api_memory_create():
+    """Create a new memory."""
+    try:
+        data = request.json or {}
+        content = data.get('content', '').strip()
+        layer = data.get('layer', 'episodic')
+        confidence = data.get('confidence', 0.8)
+        if not content:
+            return jsonify({'error': 'Missing content'}), 400
+        from memory.soft_memory import SoftMemory
+        mem = SoftMemory()
+        mid = run_async(mem.write(content, layer=layer, confidence=confidence))
+        return jsonify({'success': True, 'id': mid})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/memory/edit', methods=['POST'])
+def api_memory_edit():
+    """Edit a memory's content."""
+    try:
+        data = request.json or {}
+        memory_id = data.get('id', '')
+        new_content = data.get('content', '')
+        if not memory_id or not new_content:
+            return jsonify({'error': 'Missing id or content'}), 400
+        from memory.soft_memory import SoftMemory
+        mem = SoftMemory()
+        # Update the memory content
+        import sqlite3
+        with sqlite3.connect(str(mem.DB_PATH)) as conn:
+            cur = conn.execute(
+                "UPDATE memories SET content = ?, version = version + 1 WHERE id = ?",
+                (new_content, memory_id)
+            )
+            if cur.rowcount == 0:
+                return jsonify({'error': 'Memory not found'}), 404
+        return jsonify({'success': True, 'id': memory_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/memory/delete', methods=['POST'])
+def api_memory_delete():
+    """Delete a memory by ID."""
+    try:
+        data = request.json or {}
+        memory_id = data.get('id', '')
+        if not memory_id:
+            return jsonify({'error': 'Missing id'}), 400
+        from memory.soft_memory import SoftMemory
+        mem = SoftMemory()
+        success = mem.delete(memory_id)
+        if not success:
+            return jsonify({'error': 'Memory not found'}), 404
+        return jsonify({'success': True, 'id': memory_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ===== Chat History =====
+_chat_history = []  # In-memory chat history for current session
+MAX_HISTORY = 100
+
+
+@app.route('/api/history')
+def api_history():
+    """Get chat history."""
+    try:
+        return jsonify({'messages': _chat_history[-MAX_HISTORY:]})
+    except Exception as e:
+        return jsonify({'messages': [], 'error': str(e)})
 
 
 @app.route('/api/tools')
